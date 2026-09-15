@@ -1,0 +1,21 @@
+[21-Aug-2026 03:11:42 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.4.1". You are running 8.3.33. in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/autoload_real.php(25): require()
+#1 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/autoload.php(22): ComposerAutoloaderInit443de19ff2efebf55572e9d8c6cbe466::getLoader()
+#2 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/artisan(10): require('/home/djic2531/...')
+#3 {main}
+  thrown in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php on line 26
+[21-Aug-2026 03:11:42 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.4.1". You are running 8.3.33. in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/autoload_real.php(25): require()
+#1 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/autoload.php(22): ComposerAutoloaderInit443de19ff2efebf55572e9d8c6cbe466::getLoader()
+#2 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/artisan(10): require('/home/djic2531/...')
+#3 {main}
+  thrown in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php on line 26
+[21-Aug-2026 03:11:42 Asia/Jakarta] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.4.1". You are running 8.3.33. in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/autoload_real.php(25): require()
+#1 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/autoload.php(22): ComposerAutoloaderInit443de19ff2efebf55572e9d8c6cbe466::getLoader()
+#2 /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/artisan(10): require('/home/djic2531/...')
+#3 {main}
+  thrown in /home/djic2531/extracted/djimatosuperapp/public/nyamanapp/vendor/composer/platform_check.php on line 26
