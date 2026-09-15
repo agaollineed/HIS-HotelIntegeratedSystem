@@ -38,9 +38,7 @@ The application runs on two roles with deliberately different surfaces:
 
 Everything is written server-side with Blade. There is no JavaScript build step, which keeps deployment on shared cPanel hosting to a single upload.
 
-<div align="center">
-  <img src="./docs/screenshot-landing.png" alt="NyamanApp landing" width="100%" />
-</div>
+<div align="center"><img width="1435" height="887" alt="image" src="https://github.com/user-attachments/assets/d46f8d07-c70f-44ea-9aea-f3356e1fc7ea" /></div>
 
 ---
 
