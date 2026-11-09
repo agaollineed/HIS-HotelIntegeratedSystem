@@ -94,6 +94,33 @@
     }
     .bk-tertunda b { font-weight: 800; }
     .bk-meta { margin-top: 3px; font-size: .84rem; color: var(--muted); line-height: 1.5; }
+
+    /* Detail booking & pembayaran (bisa dibuka) */
+    .bk-detail { margin-top: 10px; border: 1px solid var(--border-2); border-radius: 12px; background: rgba(255,255,255,.02); }
+    .bk-detail > summary {
+        list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 9px 12px; font-size: .82rem; font-weight: 700; color: var(--accent);
+    }
+    .bk-detail > summary::-webkit-details-marker { display: none; }
+    .bk-detail > summary .ringkas { margin-left: auto; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .bk-detail > summary .ringkas b { color: var(--warn); }
+    .bk-detail[open] > summary { border-bottom: 1px solid var(--border-2); }
+    .bk-detail-isi { padding: 10px 12px 12px; }
+    .bk-tabel { display: grid; gap: 6px; margin-bottom: 10px; }
+    .bk-baris {
+        display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto; gap: 10px; align-items: center;
+        font-size: .82rem; padding: 7px 10px; border-radius: 10px; background: var(--bg); font-variant-numeric: tabular-nums;
+    }
+    .bk-baris .km b { font-size: .92rem; margin-right: 4px; }
+    .bk-baris .tg { color: var(--muted); }
+    .bk-baris .rp { font-weight: 800; }
+    .bk-uang { display: grid; grid-template-columns: 120px 1fr; gap: 5px 12px; margin: 0; font-size: .84rem; font-variant-numeric: tabular-nums; }
+    .bk-uang dt { color: var(--muted); }
+    .bk-uang dd { margin: 0; }
+    .bk-uang .hijau { color: var(--ok); }
+    .bk-uang .merah { color: var(--warn); }
+    .bk-bukti { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    @media (max-width: 640px) { .bk-baris { grid-template-columns: 1fr auto; } .bk-baris .tg { grid-column: 1 / -1; grid-row: 2; } }
     .bk-meta .tel { font-variant-numeric: tabular-nums; }
     .bk-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
     .bk-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -119,55 +146,14 @@
     .st-awal  { background: var(--alert-soft); color: var(--alert); border: 1px solid var(--alert-line); }
     .st-telat { background: var(--accent-2-soft); color: var(--accent-2-600); border: 1px solid var(--border-violet); }
 
+    .st-sebagian { background: var(--accent-2-soft); color: var(--accent-2-600); border: 1px solid var(--border-orange); }
+    .km-st { font-size: .66rem; font-weight: 700; color: var(--muted); }
+    .km-st.keluar { color: var(--ok); }
+    .km-st.menginap { color: var(--warn); }
+
     .day-empty { text-align: center; color: var(--muted); padding: 34px 20px; }
 
-    /* Filter tamu di dalam panel booking — menyaring daftar hari itu saja. */
-    .filter-bar {
-        display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
-        border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg);
-        padding: 4px 14px; margin: 14px 0 18px;
-    }
-    .filter-bar .ic-sm { color: var(--muted); flex: 0 0 auto; }
-    .filter-bar input {
-        flex: 1 1 200px; font-family: inherit; font-size: .93rem; color: var(--text);
-        background: transparent; border: none; outline: none; padding: 10px 0;
-    }
-    .filter-bar input::placeholder { color: var(--muted); }
-    .filter-bar .hitung { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .filter-bar .bersih {
-        background: none; border: none; cursor: pointer; color: var(--muted); display: inline-flex; padding: 3px;
-    }
-    .filter-bar .bersih:hover { color: var(--text); }
-    .filter-bar .bersih[hidden] { display: none !important; }
-    .bk[hidden] { display: none !important; }
-    .filter-kosong { text-align: center; color: var(--muted); padding: 26px 20px; }
-    .filter-kosong[hidden] { display: none !important; }
-
-    /* ---------- Toast late check-out ---------- */
-    .toast-late {
-        position: fixed; right: 22px; bottom: 22px; z-index: 40; width: min(380px, calc(100vw - 44px));
-        background: linear-gradient(180deg, var(--surface-2), var(--bg-2));
-        border: 1px solid var(--alert-line); border-radius: 16px; padding: 16px 18px;
-        box-shadow: 0 30px 70px -28px rgba(0,0,0,.95);
-    }
-    .toast-late[hidden] { display: none !important; }
-    .toast-head { display: flex; align-items: center; gap: 9px; color: var(--alert); font-weight: 800; font-size: .88rem; margin-bottom: 4px; }
-    .toast-head .x {
-        margin-left: auto; background: none; border: none; cursor: pointer; color: var(--muted);
-        display: inline-flex; padding: 2px;
-    }
-    .toast-head .x:hover { color: var(--text); }
-    .toast-sub { font-size: .8rem; color: var(--muted); margin-bottom: 12px; }
-    .toast-item { border-top: 1px solid var(--border-2); padding-top: 11px; margin-top: 11px; }
-    .toast-item:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
-    .toast-room { font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; }
-    .toast-meta { font-size: .78rem; color: var(--muted); margin-top: 2px; }
-    .toast-actions { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
-    .toast-ditandai { font-size: .74rem; color: var(--alert); font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
-
-    @media (max-width: 560px) {
-        .toast-late { right: 12px; left: 12px; bottom: 12px; width: auto; }
-    }
+    .sumber-tag.extend { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border); }
 
     @media (max-width: 640px) {
         .cal-day, .cal-blank { min-height: 52px; }
@@ -186,6 +172,9 @@
         </div>
         <a href="{{ route('staff.rooms.create') }}" class="btn btn-accent">@include('partials.icon', ['name' => 'plus', 'class' => 'ic-sm']) Tambah Kamar</a>
     </div>
+
+    {{-- Cari tamu lintas tanggal --}}
+    @include('partials.cari-tamu')
 
     {{-- 2. Kalender bulanan --}}
     <div class="card cal-card">
@@ -239,98 +228,11 @@
         @include('staff.rooms._day')
     </div>
 
-    @if ($lewatJam->isNotEmpty())
-        {{-- Kamar yang lewat jam 12.00 tetapi belum di-check-out. Muncul di
-             semua tanggal, bukan hanya tanggal terpilih, supaya tidak lolos
-             hanya karena staff sedang melihat bulan lain. --}}
-        <div class="toast-late" id="toast-late">
-            <div class="toast-head">
-                @include('partials.icon', ['name' => 'clock', 'class' => 'ic-sm'])
-                Lewat jam check-out
-                <button type="button" class="x" id="toast-tutup" title="Tutup">
-                    @include('partials.icon', ['name' => 'x', 'class' => 'ic-sm'])
-                </button>
-            </div>
-            <div class="toast-sub">Batas {{ \App\Models\Booking::JAM_CHECKOUT }} sudah lewat, kamar belum di-check-out.</div>
-
-            @foreach ($lewatJam as $grup)
-                @php $u = $grup->first(); @endphp
-                <div class="toast-item">
-                    <div class="toast-room">{{ $grup->map(fn ($b) => $b->room?->nomor)->filter()->implode(', ') }}</div>
-                    <div class="toast-meta">
-                        {{ $u->nama_tamu }} · telat
-                        {{ \App\Models\Booking::labelDurasi((int) $u->batasCheckout()->diffInMinutes(now())) }}
-                    </div>
-                    <div class="toast-actions">
-                        @if ($u->lateDitandai())
-                            <span class="toast-ditandai">
-                                @include('partials.icon', ['name' => 'check', 'class' => 'ic-xs']) Ditandai late
-                            </span>
-                        @else
-                            <form method="POST" action="{{ route('staff.rooms.late', $u) }}">
-                                @csrf
-                                <button type="submit" class="btn btn-danger btn-sm">Tandai Late Check-out</button>
-                            </form>
-                        @endif
-                        <a href="{{ route('staff.rooms.checkout', $u) }}" class="btn btn-accent btn-sm">Check-out</a>
-                    </div>
-                </div>
-            @endforeach
-        </div>
-
-        @push('scripts')
-        <script>
-            (function () {
-                const t = document.getElementById('toast-late');
-                const x = document.getElementById('toast-tutup');
-                if (t && x) x.addEventListener('click', () => { t.hidden = true; });
-            })();
-        </script>
-        @endpush
-    @endif
+    @include('partials.alarm-checkout')
 @endsection
 
 @push('scripts')
 <script>
-    // ---------- Filter nama tamu di dalam panel booking ----------
-    // Dipasang lewat delegasi pada document, bukan pada elemennya langsung,
-    // karena panel di bawah kalender diganti isinya lewat fetch — pendengar
-    // yang dipasang ke elemen lama akan ikut hilang saat panel diganti.
-    function jalankanFilter() {
-        const input = document.getElementById('filter-tamu');
-        if (!input) return;
-
-        const kata = input.value.trim().toLowerCase();
-        const kartu = document.querySelectorAll('#day-panel .bk');
-        let tampil = 0;
-
-        kartu.forEach(function (k) {
-            const teks = (k.dataset.cari || k.textContent || '').toLowerCase();
-            const cocok = kata === '' || teks.includes(kata);
-            k.hidden = !cocok;
-            if (cocok) tampil++;
-        });
-
-        const hitung = document.getElementById('filter-hitung');
-        if (hitung) hitung.textContent = kata === '' ? '' : tampil + ' dari ' + kartu.length;
-
-        const kosong = document.getElementById('filter-kosong');
-        if (kosong) kosong.hidden = !(kata !== '' && tampil === 0);
-
-        const bersih = document.getElementById('filter-bersih');
-        if (bersih) bersih.hidden = kata === '';
-    }
-
-    document.addEventListener('input', function (e) {
-        if (e.target && e.target.id === 'filter-tamu') jalankanFilter();
-    });
-    document.addEventListener('click', function (e) {
-        const b = e.target.closest('#filter-bersih');
-        if (!b) return;
-        const input = document.getElementById('filter-tamu');
-        if (input) { input.value = ''; input.focus(); jalankanFilter(); }
-    });
-
     // Klik tanggal -> ganti daftar di bawahnya via fetch (fallback: link biasa).
     (function () {
         const grid = document.getElementById('cal-grid');
@@ -347,7 +249,7 @@
                 .then(r => { if (!r.ok) throw new Error(); return r.text(); })
                 .then(html => {
                     panel.innerHTML = html;
-                    jalankanFilter();
+                    if (window.jalankanFilter) jalankanFilter();
                     grid.querySelectorAll('.cal-day.selected').forEach(el => el.classList.remove('selected'));
                     cell.classList.add('selected');
                     history.replaceState(null, '', cell.getAttribute('href'));

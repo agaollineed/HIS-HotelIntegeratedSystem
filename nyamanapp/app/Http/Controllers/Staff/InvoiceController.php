@@ -193,21 +193,25 @@ class InvoiceController extends Controller
     {
         $anggota = $booking->groupMembers()->with('room')->get();
 
+        // Satu baris per (tipe kamar, sarapan, jumlah malam). Malam dan sarapan
+        // diambil dari MASING-MASING kamar: sejak masa menginap bisa berbeda
+        // per kamar — dan tamu bisa pindah kamar per hari — memakai angka
+        // satu kamar untuk seluruh pesanan menghasilkan invoice yang keliru.
         $kamar = $anggota
             ->filter(fn ($b) => $b->room !== null)
-            ->groupBy(fn ($b) => $b->room->tipe)
-            ->map(function ($grup) use ($booking) {
+            ->groupBy(fn ($b) => $b->room->tipe . '|' . (int) $b->breakfast . '|' . max(1, (int) $b->durasi))
+            ->map(function ($grup) {
                 $contoh = $grup->first();
 
                 return [
                     'uraian'       => 'Kamar ' . $contoh->room->labelTipe()
-                        . ($booking->breakfast ? '' : ' (tanpa breakfast)'),
+                        . ($contoh->breakfast ? '' : ' (tanpa breakfast)'),
                     'keterangan'   => $grup
-                        ->sortBy(fn ($b) => (int) preg_replace('/\D/', '', (string) $b->room->nomor))
-                        ->map(fn ($b) => $b->room->nomor)
+                        ->sortBy(fn ($b) => $b->check_in->format('Ymd') . sprintf('%06d', (int) preg_replace('/\D/', '', (string) $b->room->nomor)))
+                        ->map(fn ($b) => $b->room->nomor . ($b->isPindahan() ? ' (mulai ' . $b->check_in->translatedFormat('j M') . ')' : ''))
                         ->implode(', '),
                     'jumlah_kamar' => $grup->count(),
-                    'malam'        => max(1, (int) $booking->durasi),
+                    'malam'        => max(1, (int) $contoh->durasi),
                     // Tarif BERLAKU: 300rb/450rb dengan sarapan, 250rb tanpa
                     // sarapan (King & Twin; family selalu dengan sarapan).
                     'harga'        => $contoh->hargaMalam(),

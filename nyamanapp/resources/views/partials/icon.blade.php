@@ -51,6 +51,8 @@
         'undo' => '<path d="M4.5 9.5h11a5 5 0 0 1 0 10H9"/><path d="M8.5 5.5l-4 4 4 4"/>',
         'clock' => '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.2V12l3.2 2"/>',
         'calendar' => '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17"/><path d="M8 3.5v4"/><path d="M16 3.5v4"/>',
+        'pensil' => '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
+        'home' => '<path d="M4 11l8-6.5L20 11"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
         'chart' => '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 20v-6"/><path d="M12.5 20V8.5"/><path d="M17 20v-9"/>',
         'phone' => '<path d="M8.4 4.5H5.6A2 2 0 0 0 3.6 6.7c.3 3.4 1.7 6.5 4 8.8s5.4 3.7 8.8 4a2 2 0 0 0 2.1-2v-2.7l-3.6-1.2-1.8 1.8a13 13 0 0 1-4.7-4.7l1.8-1.8L8.4 4.5z"/>',
         'key-card' => '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><rect x="5.6" y="8.4" width="5.2" height="4.3" rx="1.1"/><path d="M14.6 9.4h4.2"/><path d="M14.6 12.6h4.2"/><path d="M14.6 15.8h2.6"/>',

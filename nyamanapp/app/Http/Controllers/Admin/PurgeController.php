@@ -39,7 +39,7 @@ class PurgeController extends Controller
         $target = Booking::whereBetween('check_in', [$awal, $akhir->copy()->endOfDay()])->get();
 
         $jumlah = DB::transaction(function () use ($target) {
-            $kolomFoto = ['foto_ktp', 'foto_kartu', 'foto_pelunasan', 'foto_bayar_awal', 'foto_pembayaran_late', 'foto_kerusakan'];
+            $kolomFoto = ['foto_ktp', 'foto_kartu', 'foto_pelunasan', 'foto_bayar_awal', 'foto_bayar_tambahan', 'foto_pembayaran_late', 'foto_kerusakan'];
             $ids       = $target->pluck('id');
 
             // Kumpulkan berkas kandidat sebelum barisnya lenyap.

@@ -49,6 +49,12 @@ class KtpController extends Controller
         return $this->sajikan($booking->foto_bayar_awal, 'bayar/', 'bayar-awal-' . $booking->id);
     }
 
+    /** Bukti pembayaran selisih saat tagihan naik (upgrade kamar / tambah malam). */
+    public function bayarTambahan(Request $request, Booking $booking): BinaryFileResponse
+    {
+        return $this->sajikan($booking->foto_bayar_tambahan, 'bayar/', 'bayar-tambahan-' . $booking->id);
+    }
+
     /** Bukti pembayaran kelebihan jam pada late check-out. */
     public function pembayaranLate(Request $request, Booking $booking): BinaryFileResponse
     {

@@ -25,6 +25,13 @@
     <div class="page-head">
         <h1>Ubah Booking Kamar</h1>
         <p>Kamar <strong>{{ $booking->room?->nomor }}</strong> — {{ $booking->nama_tamu }}</p>
+        @unless ($booking->isCheckedOut())
+            <p style="margin-top: 10px">
+                <a href="{{ route('admin.rooms.pindah', $booking) }}" class="btn btn-ghost btn-sm">
+                    Pindah kamar mulai malam tertentu
+                </a>
+            </p>
+        @endunless
     </div>
 
     <div class="card form-card">

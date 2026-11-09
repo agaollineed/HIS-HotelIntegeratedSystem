@@ -21,3 +21,16 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Tambahan NyamanApp — jangan pernah ikut ke GitHub
+.DS_Store
+error_log
+/public/php.ini
+/public/.user.ini
+/public/cgi-bin
+/public/.well-known
+/.claude
+*.zip
+*.csv
+*.sql
+CARA-UPLOAD-*.md

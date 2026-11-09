@@ -25,7 +25,7 @@ class KeuanganExport implements FromCollection, WithHeadings, WithMapping, Shoul
     public function headings(): array
     {
         return [
-            'Bulan', 'Pemasukan Nyata', 'Pengeluaran', 'Laba Bersih',
+            'Bulan', 'Omset', 'Pengeluaran', 'Keuntungan', 'Bonus Karyawan (' . Keuangan::PERSEN_BONUS . '%)',
             'Pendapatan Tercatat', 'Selisih', 'Catatan', 'Dicatat Oleh', 'Terakhir Diubah',
         ];
     }
@@ -37,6 +37,7 @@ class KeuanganExport implements FromCollection, WithHeadings, WithMapping, Shoul
             $k->pemasukan,
             $k->pengeluaran,
             $k->laba(),
+            $k->bonusKaryawan(),
             $k->pendapatanTercatat(),
             $k->selisih(),
             $k->catatan ?? '—',

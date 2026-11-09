@@ -74,11 +74,112 @@ trait HandlesRoomCalendar
     }
 
     /**
+     * Pencarian tamu lintas tanggal: nama, telepon, atau nomor kamar.
+     *
+     * Panel tanggal hanya menampilkan satu malam, padahal pertanyaan yang
+     * paling sering muncul di meja depan adalah "Pak Budi menginap kapan,
+     * di kamar berapa?". Hasilnya dikelompokkan per PESANAN — kamar-kamar
+     * yang dipesan bersama, termasuk kamar hasil pindah per hari, tampil
+     * sebagai satu kunjungan dengan satu tautan ke kalender.
+     *
+     * Urutan: yang sedang menginap, lalu yang akan datang (terdekat dulu),
+     * lalu yang sudah lewat (terbaru dulu).
+     *
+     * @return array{0: string, 1: Collection|null}
+     */
+    protected function hasilPencarian(Request $request): array
+    {
+        $cari = trim((string) $request->query('cari', ''));
+
+        if (mb_strlen($cari) < 2) {
+            return [$cari, null];
+        }
+
+        $angka = ctype_digit($cari);
+
+        $cocok = Booking::query()
+            ->where(function ($q) use ($cari, $angka) {
+                $q->where('nama_tamu', 'like', '%' . $cari . '%')
+                  ->orWhere('telepon', 'like', '%' . $cari . '%');
+
+                // Nomor kamar dicocokkan PERSIS: "10" tidak boleh menyeret
+                // seluruh kamar 101–108.
+                if ($angka) {
+                    $q->orWhereHas('room', fn ($r) => $r->where('nomor', $cari));
+                }
+            })
+            ->orderByDesc('check_in')
+            ->limit(200)
+            ->get(['id', 'grup']);
+
+        if ($cocok->isEmpty()) {
+            return [$cari, collect()];
+        }
+
+        // Seluruh anggota pesanan ikut dimuat, supaya pesanan dua kamar yang
+        // cocok lewat satu nomor kamar tetap tampil lengkap.
+        $grup   = $cocok->pluck('grup')->filter()->unique()->values();
+        $tunggal = $cocok->whereNull('grup')->pluck('id');
+
+        $semua = Booking::with('room')
+            ->where(fn ($q) => $q->whereIn('grup', $grup)->orWhereIn('id', $tunggal))
+            ->get();
+
+        $hariIni = now()->startOfDay();
+
+        $hasil = $semua
+            ->groupBy(fn (Booking $b) => $b->grup ?? ('single-' . $b->id))
+            ->map(function (Collection $anggota) use ($hariIni) {
+                $anggota = $anggota
+                    ->sortBy(fn (Booking $b) => $b->check_in->format('Ymd') . sprintf('%06d', (int) preg_replace('/\D/', '', (string) $b->room?->nomor)))
+                    ->values();
+
+                $awal  = $anggota->min(fn (Booking $b) => $b->check_in->copy()->startOfDay());
+                $akhir = $anggota->max(fn (Booking $b) => $b->check_out->copy()->startOfDay());
+                $utama = $anggota->first();
+
+                $menginap = $anggota->contains(fn (Booking $b) => $b->isCheckedIn() && ! $b->isCheckedOut());
+                $selesai  = $anggota->every(fn (Booking $b) => $b->isCheckedOut());
+
+                $status = match (true) {
+                    $menginap                => 'menginap',
+                    $selesai                 => 'selesai',
+                    $akhir->lte($hariIni)    => 'lewat',
+                    default                  => 'akan',
+                };
+
+                // Tanggal yang dibuka di kalender: hari ini bila kunjungannya
+                // sedang berjalan, selain itu malam pertamanya.
+                $buka = $awal->lte($hariIni) && $akhir->gt($hariIni) ? $hariIni->copy() : $awal->copy();
+
+                return (object) [
+                    'utama'   => $utama,
+                    'anggota' => $anggota,
+                    'awal'    => $awal,
+                    'akhir'   => $akhir,
+                    'malam'   => (int) $awal->diffInDays($akhir),
+                    'status'  => $status,
+                    'buka'    => $buka,
+                    'total'   => Booking::totalPesananDari($anggota),
+                ];
+            })
+            ->sortBy(fn ($k) => match ($k->status) {
+                'menginap' => '0-' . $k->awal->format('Ymd'),
+                'akan'     => '1-' . $k->awal->format('Ymd'),
+                default    => '2-' . (99999999 - (int) $k->awal->format('Ymd')),
+            })
+            ->take(25)
+            ->values();
+
+        return [$cari, $hasil];
+    }
+
+    /**
      * Booking yang menginap pada tanggal tsb, terurut nomor kamar.
      */
     protected function bookingsOccupying(Carbon $tanggal): Collection
     {
-        return Booking::with(['room', 'creator'])
+        return Booking::with(['room', 'creator', 'pindahDari.room', 'pindahKe.room'])
             ->occupyingOn($tanggal)
             ->get()
             ->sortBy(fn (Booking $b) => (int) preg_replace('/\D/', '', (string) $b->room?->nomor))

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Exports\KeuanganExport;
 use App\Http\Controllers\Controller;
 use App\Models\Keuangan;
+use App\Support\CsvKeuangan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,7 +14,10 @@ use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 
 /**
- * Keuangan bulanan — khusus superadmin.
+ * Keuntungan bulanan — admin dan superadmin (hapus hanya superadmin).
+ *
+ * Diisi omset dan pengeluaran per bulan; keuntungan dan bonus karyawan
+ * (Keuangan::PERSEN_BONUS dari keuntungan) dihitung otomatis.
  *
  * Halaman ini menyandingkan dua angka yang sengaja berasal dari sumber
  * berbeda:
@@ -39,29 +44,20 @@ class KeuanganController extends Controller
             ->limit(120)
             ->get();
 
-        // Bulan yang BELUM dicatat — supaya yang terlewat terlihat, bukan
-        // hanya yang sudah diisi. Dibatasi sampai bulan berjalan: bulan yang
-        // belum lewat memang belum bisa punya setoran.
-        $sudah   = $baris->map(fn (Keuangan $k) => $k->kunciPeriode())->all();
-        $belum   = collect();
-        $jalan   = now()->startOfMonth();
-        $mundur  = $jalan->copy()->subMonths(11);
-
-        for ($d = $mundur->copy(); $d->lte($jalan); $d->addMonth()) {
-            if (! in_array($d->format('Y-m'), $sudah, true)) {
-                $belum->push($d->copy());
-            }
-        }
+        // Bulan yang disorot di kartu atas: bulan berjalan bila sudah diisi,
+        // kalau belum bulan terakhir yang tercatat.
+        $sorot = $baris->first(fn (Keuangan $k) => $k->kunciPeriode() === now()->format('Y-m')) ?? $baris->first();
 
         return view('admin.keuangan.index', [
             'baris'   => $baris,
-            'belum'   => $belum->sortByDesc(fn ($d) => $d->format('Y-m'))->values(),
+            'sorot'   => $sorot,
             'tahun'   => $tahun,
             'bulanIni' => now()->format('Y-m'),
             'ringkas' => [
                 'pemasukan'   => (int) $baris->sum('pemasukan'),
                 'pengeluaran' => (int) $baris->sum('pengeluaran'),
                 'laba'        => (int) $baris->sum(fn (Keuangan $k) => $k->laba()),
+                'bonus'       => (int) $baris->sum(fn (Keuangan $k) => $k->bonusKaryawan()),
                 'bulan'       => $baris->count(),
             ],
         ]);
@@ -80,6 +76,7 @@ class KeuanganController extends Controller
             'pemasukan' => $k->pemasukan,
             'pengeluaran' => $k->pengeluaran,
             'laba'      => $k->laba(),
+            'bonus'     => $k->bonusKaryawan(),
             'tercatat'  => $k->pendapatanTercatat(),
             'selisih'   => $k->selisih(),
         ])->values();
@@ -111,9 +108,9 @@ class KeuanganController extends Controller
         ], [
             'periode.required'    => 'Pilih bulan yang dicatat.',
             'periode.regex'       => 'Format bulan tidak valid.',
-            'pemasukan.required'  => 'Isi pemasukan nyata bulan tersebut.',
-            'pemasukan.integer'   => 'Pemasukan harus berupa angka rupiah tanpa titik.',
-            'pemasukan.min'       => 'Pemasukan tidak boleh negatif.',
+            'pemasukan.required'  => 'Isi omset bulan tersebut.',
+            'pemasukan.integer'   => 'Omset harus berupa angka rupiah tanpa titik.',
+            'pemasukan.min'       => 'Omset tidak boleh negatif.',
             'pengeluaran.integer' => 'Pengeluaran harus berupa angka rupiah tanpa titik.',
             'pengeluaran.min'     => 'Pengeluaran tidak boleh negatif.',
             'catatan.max'         => 'Catatan maksimal 1000 karakter.',
@@ -160,17 +157,142 @@ class KeuanganController extends Controller
         }
 
         return redirect()->route('admin.keuangan.index')
-            ->with('success', 'Keuangan ' . $periode->translatedFormat('F Y')
-                . ($baru ? ' berhasil dicatat.' : ' berhasil diperbarui.'));
+            ->with('success', 'Keuntungan ' . $periode->translatedFormat('F Y')
+                . ($baru ? ' berhasil dicatat' : ' berhasil diperbarui') . ': '
+                . Keuangan::rupiah($isi['pemasukan'] - $isi['pengeluaran']) . ', bonus karyawan '
+                . Keuangan::rupiah(Keuangan::bonusDari($isi['pemasukan'] - $isi['pengeluaran'])) . '.');
     }
 
     public function destroy(Keuangan $keuangan): RedirectResponse
     {
+        abort_unless(Auth::user()->bolehHapusKeuangan(), 403);
+
         $label = $keuangan->labelPeriode();
         $keuangan->delete();
 
         return redirect()->route('admin.keuangan.index')
             ->with('success', 'Catatan keuangan ' . $label . ' dihapus.');
+    }
+
+    /** Unduh seluruh bulan sebagai CSV — sekaligus contoh format untuk impor. */
+    public function exportCsv()
+    {
+        return CsvKeuangan::unduh(
+            'keuntungan-' . now()->format('Ymd') . '.csv',
+            ['bulan', 'omset', 'pengeluaran', 'keuntungan', 'bonus_karyawan', 'catatan'],
+            Keuangan::orderBy('periode')->get()->map(fn (Keuangan $k) => [
+                $k->kunciPeriode(), $k->pemasukan, $k->pengeluaran, $k->keuntungan(), $k->bonusKaryawan(),
+                preg_replace('/\s+/', ' ', (string) $k->catatan),
+            ])
+        );
+    }
+
+    /**
+     * Impor bulan-bulan lama dari CSV: bulan, omset, pengeluaran, catatan
+     * (opsional). Kolom keuntungan & bonus di berkas diabaikan — keduanya
+     * selalu dihitung ulang dari omset dan pengeluaran.
+     *
+     * Semua-atau-tidak-sama-sekali, seperti impor saldo.
+     */
+    public function importCsv(Request $request): RedirectResponse
+    {
+        $request->validate(
+            ['berkas' => ['required', 'file', 'max:2048', 'mimes:csv,txt']],
+            ['berkas.required' => 'Pilih berkas CSV.', 'berkas.mimes' => 'Berkas harus berformat CSV.', 'berkas.max' => 'Ukuran berkas maksimal 2 MB.']
+        );
+
+        try {
+            $baris = CsvKeuangan::baca($request->file('berkas'));
+        } catch (\Throwable $e) {
+            report($e);
+            return $this->galatImpor(['Berkas tidak bisa dibaca. Simpan ulang dari Excel/Sheets sebagai CSV lalu coba lagi.']);
+        }
+        if ($baris === []) {
+            return $this->galatImpor(['Berkas kosong.']);
+        }
+
+        ['peta' => $peta, 'adaJudul' => $judul, 'dariJudul' => $dariJudul] = CsvKeuangan::petaKolom($baris[0]['sel'], [
+            'bulan'       => ['bulan', 'periode', 'month'],
+            'omset'       => ['omset', 'omzet', 'pemasukan', 'pendapatan', 'revenue'],
+            'pengeluaran' => ['pengeluaran', 'biaya', 'expense', 'expenses'],
+            'catatan'     => ['catatan', 'keterangan', 'note', 'notes'],
+        ], ['bulan', 'omset', 'pengeluaran', 'catatan']);
+
+        if ($judul || CsvKeuangan::bulan(CsvKeuangan::sel($baris[0]['sel'], $peta, 'bulan')) === null) {
+            array_shift($baris);
+        }
+        if (count($baris) > CsvKeuangan::MAKS_BARIS) {
+            return $this->galatImpor(['Maksimal ' . CsvKeuangan::MAKS_BARIS . ' baris sekali impor.']);
+        }
+
+        $galat = [];
+        $data  = [];
+        $bulanIni = now()->startOfMonth();
+        foreach ($baris as ['no' => $no, 'sel' => $sel]) {
+            $bln    = CsvKeuangan::bulan(CsvKeuangan::sel($sel, $peta, 'bulan'));
+            $omset  = CsvKeuangan::angka(CsvKeuangan::sel($sel, $peta, 'omset'));
+            $keluarTeks = CsvKeuangan::sel($sel, $peta, 'pengeluaran');
+            $keluar = $keluarTeks === '' ? 0 : CsvKeuangan::angka($keluarTeks);
+
+            if ($bln === null) {
+                $galat[] = "Baris $no: bulan \"" . CsvKeuangan::sel($sel, $peta, 'bulan') . '" tidak dikenali (contoh: 2026-04 atau April 2026).';
+            } elseif ($bln->greaterThan($bulanIni)) {
+                $galat[] = "Baris $no: " . $bln->translatedFormat('F Y') . ' belum berjalan.';
+            } elseif ($omset === null) {
+                $galat[] = "Baris $no: omset \"" . CsvKeuangan::sel($sel, $peta, 'omset') . '" bukan angka rupiah yang sah.';
+            } elseif ($keluar === null) {
+                $galat[] = "Baris $no: pengeluaran \"" . $keluarTeks . '" bukan angka rupiah yang sah.';
+            } elseif (isset($data[$bln->format('Y-m')])) {
+                $galat[] = "Baris $no: " . $bln->translatedFormat('F Y') . " sudah ada di baris {$data[$bln->format('Y-m')]['no']}.";
+            } else {
+                $data[$bln->format('Y-m')] = [
+                    'no' => $no, 'periode' => $bln, 'pemasukan' => $omset, 'pengeluaran' => $keluar,
+                    // Catatan dipakai bila kolomnya berjudul "catatan", atau selnya
+                    // berisi. Kolom kosong di ujung (sisa Excel) tidak boleh
+                    // menghapus catatan yang sudah ada.
+                    'catatan' => in_array('catatan', $dariJudul, true) || CsvKeuangan::sel($sel, $peta, 'catatan') !== ''
+                        ? (mb_substr(CsvKeuangan::sel($sel, $peta, 'catatan'), 0, 1000) ?: null)
+                        : false,
+                ];
+            }
+        }
+
+        if ($galat !== []) {
+            return $this->galatImpor($galat);
+        }
+        if ($data === []) {
+            return $this->galatImpor(['Tidak ada baris data di berkas.']);
+        }
+
+        $baru = 0; $ubah = 0;
+        DB::transaction(function () use ($data, &$baru, &$ubah) {
+            foreach ($data as $d) {
+                $isi = ['pemasukan' => $d['pemasukan'], 'pengeluaran' => $d['pengeluaran'], 'dicatat_by' => Auth::id()];
+                // Tanpa kolom catatan di berkas, catatan yang sudah ada tidak dihapus.
+                if ($d['catatan'] !== false) {
+                    $isi['catatan'] = $d['catatan'];
+                }
+                $ada = Keuangan::whereDate('periode', $d['periode']->toDateString())->first();
+                if ($ada) {
+                    $ada->update($isi);
+                    $ubah++;
+                } else {
+                    Keuangan::create($isi + ['periode' => $d['periode']]);
+                    $baru++;
+                }
+            }
+        });
+
+        return redirect()->route('admin.keuangan.index')
+            ->with('success', "Impor selesai: $baru bulan baru" . ($ubah ? ", $ubah bulan diperbarui" : '') . '.');
+    }
+
+    /** @param list<string> $galat */
+    private function galatImpor(array $galat): RedirectResponse
+    {
+        return redirect()->route('admin.keuangan.index')
+            ->with('galat_impor', $galat)
+            ->with('error', 'Impor dibatalkan — tidak ada data yang disimpan. Perbaiki ' . count($galat) . ' masalah di bawah lalu unggah ulang.');
     }
 
     public function export()

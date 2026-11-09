@@ -44,9 +44,15 @@
     <div class="page-head head-row">
         <div>
             <h1>Invoice</h1>
-            <p>Ringkasan tagihan yang diterbitkan staff.</p>
+            <p>Ringkasan tagihan yang diterbitkan staff dan admin.</p>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap">
+            {{-- Admin & superadmin juga berdiri di meja depan: membuat dan
+                 mencetak invoice tidak perlu menunggu staff. Formulir dan
+                 aturannya sama persis dengan milik staff. --}}
+            <a href="{{ route('admin.invoices.create') }}" class="btn btn-accent">
+                @include('partials.icon', ['name' => 'plus', 'class' => 'ic-sm']) Buat Invoice
+            </a>
             <a href="{{ route('admin.invoices.export', ['bulan' => $bulan->format('Y-m')]) }}" class="btn btn-ghost">
                 @include('partials.icon', ['name' => 'download', 'class' => 'ic-sm']) Unduh Excel
             </a>
@@ -123,7 +129,7 @@
                                 <span style="color: var(--muted); font-size: .78rem">{{ $inv->creator?->name ?? '—' }}</span>
                             </td>
                             <td>
-                                <a href="{{ route('admin.invoices.show', $inv) }}" target="_blank" class="btn btn-ghost btn-sm">Lihat</a>
+                                <a href="{{ route('admin.invoices.show', $inv) }}" target="_blank" class="btn btn-ghost btn-sm">Lihat / Cetak</a>
                             </td>
                         </tr>
                     @endforeach

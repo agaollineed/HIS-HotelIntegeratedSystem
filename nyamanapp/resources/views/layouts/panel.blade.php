@@ -1,3 +1,26 @@
+@php
+    // Menu samping untuk semua peran — pola dari Djimato Super App.
+    // Setiap baris: [label, ikon, url, pola rute yang membuatnya aktif].
+    $u = Auth::user();
+    $sidebar = $u->isAdmin() ? array_values(array_filter([
+        ['Beranda',       'home',      route('dashboard'),            ['dashboard']],
+        ['Kamar',         'bed',       route('admin.rooms.index'),    ['admin.rooms.*', 'admin.perubahan.*']],
+        ['Riwayat Tamu',  'users',     route('admin.tamu.index'),     ['admin.tamu.*']],
+        ['Invoice',       'clipboard', route('admin.invoices.index'), ['admin.invoices.*']],
+        ['Stok',          'box',       route('admin.stocks.index'),   ['admin.stocks.*', 'log', 'log.*']],
+        ['Absensi',       'clock',     route('admin.absensi.index'),  ['admin.absensi.*']],
+        ['Laporan',       'inbox',     route('admin.reports.index'),  ['admin.reports.*']],
+        ['Keuangan',      'chart',     route('admin.keuangan.saldo'), ['admin.keuangan.*']],
+        $u->bolehKelolaAkun() ? ['Akun',     'key-card', route('admin.akun.index'),     ['admin.akun.*']] : null,
+    ])) : [
+        ['Beranda',          'home',      route('dashboard'),             ['dashboard']],
+        ['Kamar',            'bed',       route('staff.rooms.index'),     ['staff.rooms.*']],
+        ['Invoice',          'clipboard', route('staff.invoices.index'),  ['staff.invoices.*']],
+        ['Stok',             'box',       route('staff.stocks.index'),    ['staff.stocks.*']],
+        ['Jadwal & Absensi', 'clock',     route('staff.absensi.index'),   ['staff.absensi.*', 'staff.jadwal.*', 'staff.karyawan.*']],
+        ['Laporan',          'inbox',     route('staff.reports.index'),   ['staff.reports.*']],
+    ];
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -5,6 +28,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Panel') — NyamanSuperApp</title>
+    @include('partials.favicon')
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -112,7 +136,6 @@
         .brand .word { display: inline-flex; gap: 4px; }
         .topbar-left { display: flex; align-items: center; gap: 14px; }
         .topbar-right { display: flex; align-items: center; gap: 14px; }
-        .btn-home { flex: 0 0 auto; }
         .who { display: flex; flex-direction: row; align-items: center; gap: 10px; line-height: 1.15; }
         .who .name { font-weight: 600; font-size: .92rem; }
         .badge {
@@ -133,8 +156,48 @@
         }
         .btn-logout:hover { color: var(--text); border-color: var(--danger); }
 
+        /* ---------- Latar idle: cahaya ungu yang melayang pelan ---------- */
+        .latar { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+        .latar span { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .32; will-change: transform; }
+        .latar .a { width: 480px; height: 480px; right: -160px; top: -170px; background: #7c3aed; animation: melayang-a 26s ease-in-out infinite alternate; }
+        .latar .b { width: 420px; height: 420px; left: -170px; bottom: -160px; background: #6d28d9; animation: melayang-b 30s ease-in-out infinite alternate; }
+        .latar .c { width: 260px; height: 260px; left: 45%; top: 40%; background: #a78bfa; opacity: .12; animation: melayang-c 34s ease-in-out infinite alternate; }
+        @keyframes melayang-a { to { transform: translate(-110px, 90px) scale(1.08); } }
+        @keyframes melayang-b { to { transform: translate(90px, -80px) scale(1.1); } }
+        @keyframes melayang-c { to { transform: translate(-80px, -60px) scale(1.15); } }
+
+        /* ---------- Menu samping ---------- */
+        .shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: start; }
+        .shell > .wrap { width: 100%; }
+        .sidenav {
+            position: sticky; top: 65px; height: calc(100vh - 65px); overflow-y: auto;
+            display: flex; flex-direction: column; gap: 4px; padding: 22px 14px;
+            border-right: 1px solid var(--border-2); background: rgba(10, 7, 16, .55); backdrop-filter: blur(10px);
+        }
+        .sidenav a {
+            display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px;
+            color: var(--muted); text-decoration: none; font-weight: 700; font-size: .92rem;
+            transition: background .15s, color .15s;
+        }
+        .sidenav a:hover { background: var(--hover); color: var(--text); }
+        .sidenav a.on { background: var(--grad); color: #fff; box-shadow: 0 12px 26px -14px var(--accent-glow); }
+        .sidenav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        @media (max-width: 900px) {
+            /* minmax(0, 1fr), bukan 1fr: kolom isi tidak boleh ikut melebar
+               mengikuti konten lebar (grafik, tabel) sampai halaman bisa
+               digeser ke samping di ponsel. */
+            .shell { grid-template-columns: minmax(0, 1fr); }
+            .sidenav {
+                position: sticky; top: 61px; z-index: 15; height: auto; flex-direction: row; overflow-x: auto; gap: 6px;
+                padding: 8px 14px; border-right: 0; border-bottom: 1px solid var(--border-2);
+                background: rgba(10, 7, 16, .9); scrollbar-width: none;
+            }
+            .sidenav::-webkit-scrollbar { display: none; }
+            .sidenav a { flex: 0 0 auto; padding: 8px 12px; font-size: .84rem; }
+        }
+
         /* ---------- Layout ---------- */
-        .wrap { max-width: 1040px; margin: 0 auto; padding: 34px 22px 80px; }
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 34px 26px 80px; }
         .page-head { margin-bottom: 26px; }
         .page-head h1 { margin: 0 0 6px; font-size: 1.75rem; font-weight: 800; letter-spacing: -.025em; }
         .page-head p { margin: 0; color: var(--muted); font-size: .96rem; }
@@ -214,11 +277,47 @@
         @media (max-width: 560px) {
             .who .name { display: none; }
             .page-head h1 { font-size: 1.45rem; }
+            .topbar { padding: 12px 14px; }
         }
+        /* Ponsel sempit: bilah atas jangan lebih lebar dari layar. */
+        @media (max-width: 420px) {
+            .topbar { gap: 10px; }
+            .topbar-right { gap: 8px; }
+            .btn-logout { padding: 7px 12px; }
+            .badge { padding: 3px 7px; letter-spacing: .04em; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .latar span { animation: none; }
+        }
+
+        /* Menu "Edit" pada kartu kamar: satu tombol, pilihannya di dalam. */
+        .menu-edit { position: relative; display: inline-block; }
+        .menu-edit > summary { list-style: none; cursor: pointer; }
+        .menu-edit > summary::-webkit-details-marker { display: none; }
+        .menu-edit[open] > summary { border-color: var(--accent); color: var(--text); }
+        .menu-edit[open] > summary .ic-xs:last-child { transform: rotate(180deg); }
+        .menu-edit-isi {
+            position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 270px;
+            display: grid; gap: 4px; padding: 6px; border-radius: 14px;
+            background: var(--surface-2); border: 1px solid var(--border);
+            box-shadow: 0 24px 50px -20px rgba(0,0,0,.9);
+        }
+        .menu-edit.dalam .menu-edit-isi { position: static; width: auto; margin-top: 8px; box-shadow: none; }
+        .menu-edit-isi a, .menu-edit-isi button {
+            display: grid; gap: 2px; text-align: left; text-decoration: none; color: var(--text);
+            padding: 9px 11px; border-radius: 10px; border: 1px solid transparent;
+            background: none; font: inherit; cursor: pointer; width: 100%;
+        }
+        .menu-edit-isi a:hover, .menu-edit-isi button:hover { background: var(--hover); border-color: var(--border-2); }
+        .menu-edit-isi b { font-size: .85rem; display: inline-flex; align-items: center; gap: 7px; }
+        .menu-edit-isi span { font-size: .74rem; color: var(--muted); line-height: 1.4; }
+        .menu-edit-isi hr { border: none; border-top: 1px solid var(--border-2); margin: 2px 4px; }
+        @media (max-width: 640px) { .menu-edit-isi { right: auto; left: 0; } }
     </style>
     @stack('head')
 </head>
 <body>
+    <div class="latar" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span></div>
     <header class="topbar">
         <div class="topbar-left">
             <div class="brand">
@@ -227,9 +326,6 @@
                     <span class="word">Nyaman<span class="sub">Super</span><span class="sub2">App</span></span>
                 </a>
             </div>
-            @unless (request()->routeIs('dashboard'))
-                <a href="{{ route('dashboard') }}" class="btn btn-ghost btn-sm btn-home">@include('partials.icon', ['name' => 'arrow-left', 'class' => 'ic-xs']) Beranda</a>
-            @endunless
         </div>
         <div class="topbar-right">
             <div class="who">
@@ -243,6 +339,15 @@
         </div>
     </header>
 
+    <div class="shell">
+    <nav class="sidenav" aria-label="Menu utama">
+        @foreach ($sidebar as [$label, $ikon, $url, $pola])
+            @php $aktif = request()->routeIs(...$pola); @endphp
+            <a href="{{ $url }}" class="{{ $aktif ? 'on' : '' }}" @if ($aktif) aria-current="page" @endif>
+                @include('partials.icon', ['name' => $ikon, 'class' => 'ic-sm']) <span>{{ $label }}</span>
+            </a>
+        @endforeach
+    </nav>
     <main class="wrap">
         @if (session('success'))
             <div class="flash ok">@include('partials.icon', ['name' => 'check', 'class' => 'flash-ic']) {{ session('success') }}</div>
@@ -259,6 +364,7 @@
 
         @yield('content')
     </main>
+    </div>
 
     <div class="lightbox" id="lightbox" hidden>
         <img src="" alt="Foto KTP">
@@ -292,6 +398,19 @@
                 }
             });
         })();
+    </script>
+
+    <script>
+        // Menu Edit: klik di luar atau tekan Esc menutupnya, dan hanya satu
+        // yang terbuka pada satu waktu.
+        document.addEventListener('click', function (e) {
+            document.querySelectorAll('details.menu-edit[open]').forEach(function (d) {
+                if (!d.contains(e.target)) d.open = false;
+            });
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') document.querySelectorAll('details.menu-edit[open]').forEach(d => { d.open = false; });
+        });
     </script>
 
     @stack('scripts')

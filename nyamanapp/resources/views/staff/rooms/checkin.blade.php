@@ -36,8 +36,9 @@
 @endpush
 
 @section('content')
+    @php $pindahDari = $pindahDari ?? null; @endphp
     <div class="page-head">
-        <h1>Tamu Check-in</h1>
+        <h1>{{ $pindahDari ? 'Check-in Pindahan' : 'Tamu Check-in' }}</h1>
         <p>Kamar <strong>{{ $groupRooms->implode(', ') }}</strong> — {{ $booking->nama_tamu }}</p>
     </div>
 
@@ -70,6 +71,9 @@
                 <div class="lbl">Pembayaran</div>
                 <div class="val" style="color: {{ $booking->lunas() ? 'var(--ok)' : 'var(--alert)' }}">
                     {{ $booking->labelBayar() }}
+                    @if (($sisaBayar ?? 0) > 0)
+                        · sisa {{ \App\Models\Booking::rupiah($sisaBayar) }}
+                    @endif
                 </div>
             </div>
             <div>
@@ -84,16 +88,31 @@
             </div>
         </div>
 
-        @unless ($booking->isCheckedIn())
+        @if ($pindahDari && ! $booking->isCheckedIn())
+            <div class="ci-jam awal">
+                @include('partials.icon', ['name' => 'log-out', 'class' => 'ic-lg'])
+                <span>
+                    <b>Tamu pindah dari kamar {{ $pindahDari->room?->nomor ?? '—' }}</b>
+                    Kamar {{ $pindahDari->room?->nomor ?? '—' }} otomatis ditutup dengan status "Pindah kamar"
+                    saat check-in ini disimpan. Pindah kamar bukan kedatangan baru, jadi tidak ada biaya early check-in.
+                    @if ($butuhBayar)
+                        Masih ada sisa tagihan {{ \App\Models\Booking::rupiah($sisaBayar) }} — bukti pelunasannya wajib diunggah.
+                    @endif
+                </span>
+            </div>
+        @endif
+
+        @unless ($booking->isCheckedIn() || $pindahDari)
             @if ($menitAwal > 0)
                 @php
-                    // Biaya early check-in untuk SELURUH kamar dalam pesanan ini.
-                    $biayaAwal = $booking->biayaEarlyCheckin(now()) * max(1, $booking->groupMembers()->count());
+                    // Biaya early check-in untuk kamar yang dipilih; ikut berubah
+                    // saat centangnya diubah.
+                    $biayaAwal = (int) $calon->whereIn('id', $terpilih)->sum(fn ($m) => $m->biayaEarlyCheckin(now()));
                 @endphp
                 <div class="ci-jam awal">
                     @include('partials.icon', ['name' => 'clock', 'class' => 'ic-lg'])
                     <span>
-                        <b>Early check-in{{ $biayaAwal > 0 ? ' — biaya ' . \App\Models\Booking::rupiah($biayaAwal) : '' }}</b>
+                        <b>Early check-in<span id="ci-biaya">{{ $biayaAwal > 0 ? ' — biaya ' . \App\Models\Booking::rupiah($biayaAwal) : '' }}</span></b>
                         Sekarang {{ now()->format('H:i') }}, jam masuk {{ \App\Models\Booking::JAM_CHECKIN }}.
                         @if ($biayaAwal > 0)
                             Masuk sebelum {{ \App\Models\Booking::JAM_EARLY_BERBAYAR }} dikenai tambahan 1 malam penuh per kamar.
@@ -114,10 +133,17 @@
 
         <form method="POST" action="{{ \App\Support\Panel::rute('rooms.checkin.store', $booking) }}" enctype="multipart/form-data">
             @csrf
-            {{-- Lingkup dibawa dari tautan yang diklik: 'one' hanya kamar ini,
-                 'group' seluruh kamar pesanan. Dikirim ulang lewat formulir
-                 supaya keputusan di layar dan yang dikerjakan server sama. --}}
-            <input type="hidden" name="scope" value="{{ $scope ?? 'group' }}">
+            @include('partials.pilih-kamar', [
+                'baris'    => $calon->map(fn ($m) => [
+                    'id'    => $m->id,
+                    'nomor' => $m->room?->nomor ?? '—',
+                    'info'  => $m->check_in->translatedFormat('j M') . ' – ' . $m->check_out->translatedFormat('j M Y') . ' · ' . $m->durasi . ' malam',
+                    'label' => 'Belum check-in',
+                    'data'  => ['biaya' => $m->biayaEarlyCheckin(now())],
+                ])->all(),
+                'terpilih' => $terpilih,
+                'judul'    => 'Pilih kamar yang tamunya sudah datang',
+            ])
 
             @if ($butuhBayar)
                 @include('partials.foto-uploader', [
@@ -125,9 +151,11 @@
                     'fotoUrl' => $booking->foto_pelunasan ? route('bayar.show', $booking) : null,
                     'ikon'    => 'clipboard',
                     'judul'   => '1 — Bukti pelunasan',
-                    'pesan'   => $menitAwal > 0 && $booking->lunas()
-                        ? 'Bukti pembayaran biaya early check-in.'
-                        : 'Bukti pelunasan sisa tagihan.',
+                    'pesan'   => $pindahDari
+                        ? 'Bukti pelunasan sisa tagihan ' . \App\Models\Booking::rupiah($sisaBayar) . '.'
+                        : ($menitAwal > 0 && $booking->lunas()
+                            ? 'Bukti pembayaran biaya early check-in.'
+                            : 'Bukti pelunasan sisa tagihan.'),
                     'hint'    => 'Wajib.',
                 ])
             @endif
@@ -143,10 +171,13 @@
 
             <div class="form-actions">
                 <a href="{{ \App\Support\Panel::rute('rooms.index') }}" class="btn btn-ghost">Batal</a>
-                <button type="submit" id="btn-checkin" class="btn {{ $booking->isCheckedIn() ? 'btn-accent' : 'btn-orange' }}">
+                <button type="submit" id="btn-checkin" class="btn {{ $booking->isCheckedIn() ? 'btn-accent' : 'btn-orange' }}"
+                        data-label="{{ ($booking->isCheckedIn() || $pindahDari) ? '' : 'Tamu Check-in' }}">
                     {{ $booking->isCheckedIn()
                         ? 'Simpan Foto Baru'
-                        : 'Tamu Check-in' . ($groupRooms->count() > 1 ? ' (' . $groupRooms->count() . ' kamar)' : '') }}
+                        : ($pindahDari
+                            ? 'Pindahkan Tamu ke Kamar ' . $groupRooms->implode(', ')
+                            : 'Tamu Check-in' . (count($terpilih) > 1 ? ' (' . count($terpilih) . ' kamar)' : '')) }}
                 </button>
             </div>
         </form>
@@ -169,15 +200,28 @@
         }))
         .filter(x => x.input);
 
+    const kamar = Array.from(document.querySelectorAll('.js-kamar'));
+    const biaya = document.getElementById('ci-biaya');
+    const terpilih = () => kamar.filter(k => k.type === 'hidden' || k.checked);
+
     function periksa() {
-        const lengkap = wajib.every(x => x.sudahAda || (x.input.files && x.input.files.length > 0));
+        const pilih = terpilih();
+        const lengkap = pilih.length > 0 && wajib.every(x => x.sudahAda || (x.input.files && x.input.files.length > 0));
+
+        if (btn.dataset.label) btn.textContent = btn.dataset.label + (pilih.length > 1 ? ' (' + pilih.length + ' kamar)' : '');
+        if (biaya) {
+            const n = pilih.reduce((s, k) => s + (parseInt(k.dataset.biaya, 10) || 0), 0);
+            biaya.textContent = n > 0 ? ' — biaya Rp ' + n.toLocaleString('id-ID') : '';
+        }
+
         btn.disabled = !lengkap;
         btn.style.opacity = lengkap ? '' : '.45';
         btn.style.cursor  = lengkap ? '' : 'not-allowed';
-        btn.title = lengkap ? '' : 'Lengkapi foto yang diminta terlebih dahulu';
+        btn.title = lengkap ? '' : (pilih.length ? 'Lengkapi foto yang diminta terlebih dahulu' : 'Pilih minimal satu kamar');
     }
 
     wajib.forEach(x => x.input.addEventListener('change', periksa));
+    kamar.forEach(k => k.addEventListener('change', periksa));
     periksa();
 })();
 </script>

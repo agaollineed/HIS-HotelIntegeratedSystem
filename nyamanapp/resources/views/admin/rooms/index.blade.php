@@ -122,6 +122,13 @@
         background: var(--accent-2-soft); border: 1px solid var(--border-violet); color: var(--accent-2);
         border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-size: .84rem; line-height: 1.55;
     }
+    .req-tukar {
+        display: flex; gap: 10px; align-items: flex-start;
+        background: var(--accent-2-soft); border: 1px solid var(--border-violet); color: var(--accent-2);
+        border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-size: .84rem; line-height: 1.55;
+    }
+    .req-tukar b { font-weight: 800; }
+    .req-tukar.galat { background: var(--alert-soft); border-color: var(--alert-line); color: var(--alert); }
     .req-aksi { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .req-aksi form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .req-aksi input[type=text] {
@@ -172,6 +179,9 @@
     .bf-ring b { color: var(--ok); font-variant-numeric: tabular-nums; }
 
     .src-badge.dp { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+    .src-badge.belum { background: var(--alert-soft); color: var(--alert); border: 1px solid var(--alert-line); }
+    .src-badge.extend { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border); }
+    .menu-edit.dalam[open] { flex-basis: 100%; }
 
     .st-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: .74rem; font-weight: 700; }
     .st-done    { background: var(--accent-soft); color: var(--accent);       border: 1px solid var(--border); }
@@ -284,6 +294,44 @@
                         </div>
                     @endif
 
+                    {{-- Pindah ke kamar terisi = tukar kamar. Admin diberi tahu siapa
+                         yang ikut bergeser (atau kenapa tidak bisa) SEBELUM menekan setujui. --}}
+                    {{-- Direset tiap kartu: variabel Blade bertahan antar putaran. --}}
+                    @php $rencana = $r->usang() ? null : $r->rencanaPindah(); @endphp
+                    @if ($rencana !== null)
+                        @if ($rencana->galat !== null)
+                            <div class="req-tukar galat">
+                                <span><b>Belum bisa disetujui.</b> {{ $rencana->galat }}</span>
+                            </div>
+                        @else
+                            @if ($rencana->menukar())
+                                <div class="req-tukar">
+                                    <span><b>Tukar kamar.</b> {{ $rencana->keteranganTukar() }} Berlaku otomatis bila disetujui.</span>
+                                </div>
+                            @endif
+                            @if ($rencana->selisih() !== 0)
+                                @php $pv = $rencana->pratinjauBayar(); @endphp
+                                <div class="req-tukar">
+                                    <span>
+                                        <b>Tagihan berubah.</b>
+                                        Tarif {{ \App\Models\Booking::rupiah($rencana->tarifLama()) }} &rarr;
+                                        {{ \App\Models\Booking::rupiah($rencana->tarifBaru()) }} per malam
+                                        untuk {{ $rencana->malamPindah() }} malam
+                                        ({{ $rencana->selisih() > 0 ? '+' : '−' }}{{ \App\Models\Booking::rupiah(abs($rencana->selisih())) }}).
+                                        Tagihan pesanan {{ \App\Models\Booking::rupiah($pv['tagihan_lama']) }} &rarr;
+                                        {{ \App\Models\Booking::rupiah($pv['tagihan_baru']) }},
+                                        sudah dibayar {{ \App\Models\Booking::rupiah($pv['dibayar']) }}.
+                                        @if ($pv['sisa_baru'] > 0)
+                                            Sisa {{ \App\Models\Booking::rupiah($pv['sisa_baru']) }} ditagih saat check-in atau check-out.
+                                        @elseif ($pv['dibayar'] > $pv['tagihan_baru'])
+                                            Tamu kelebihan bayar {{ \App\Models\Booking::rupiah($pv['dibayar'] - $pv['tagihan_baru']) }}.
+                                        @endif
+                                    </span>
+                                </div>
+                            @endif
+                        @endif
+                    @endif
+
                     <div class="req-alasan">{{ $r->alasan }}</div>
 
                     <div class="req-aksi">
@@ -322,6 +370,9 @@
             ])
         </div>
     </div>
+
+    {{-- Cari tamu lintas tanggal --}}
+    @include('partials.cari-tamu')
 
     {{-- 1. Kalender bulanan --}}
     <div class="card cal-card">
@@ -374,6 +425,8 @@
     <div class="card day-card" id="day-panel">
         @include('admin.rooms._day')
     </div>
+
+    @include('partials.alarm-checkout')
 @endsection
 
 @push('scripts')
@@ -394,6 +447,7 @@
                 .then(r => { if (!r.ok) throw new Error(); return r.text(); })
                 .then(html => {
                     panel.innerHTML = html;
+                    if (window.jalankanFilter) jalankanFilter();
                     grid.querySelectorAll('.cal-day.selected').forEach(el => el.classList.remove('selected'));
                     cell.classList.add('selected');
                     history.replaceState(null, '', cell.getAttribute('href'));

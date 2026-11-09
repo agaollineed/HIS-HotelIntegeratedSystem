@@ -1,89 +1,81 @@
+{{-- Halaman pembuka: logo Nyaman sebentar, lalu langsung ke halaman login.
+     Tidak ada landing page lagi — aplikasi ini hanya untuk pengelola hotel. --}}
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NyamanSuperApp — Kelola Penginapan dalam Satu Aplikasi</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>NyamanSuperApp</title>
+    @include('partials.favicon')
+    {{-- Cadangan tanpa JavaScript: tetap sampai di halaman login. --}}
+    <noscript><meta http-equiv="refresh" content="2;url={{ route('login') }}"></noscript>
+    <link rel="prefetch" href="{{ route('login') }}">
+    <link rel="preload" as="image" href="{{ asset('img/logo-senyum.png') }}">
     <style>
-        :root {
-            --bg: #0a0710; --surface: #16101f;
-            --accent: #a78bfa; --accent-600: #8b5cf6;
-            --grad: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
-            --grad-bright: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
-            --grad-rev: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
-            --accent-soft: rgba(167,139,250,.13);
-            --glow: rgba(139,92,246,.45);
-            --text: #f6f4fb; --muted: #9b93ad;
-            --border: rgba(255,255,255,.09);
-            --accent-2: #d8b4fe; --accent-2-600: #c084fc;
-            --accent-2-glow: rgba(216, 180, 254, .30);
-            --border-violet: rgba(216, 180, 254, .28);
-            --accent-2-soft: rgba(216, 180, 254, .12);
-        }
+        :root { --bg: #0a0710; --muted: #9b93ad; --kuning: #edb652; }
         html { color-scheme: dark; }
         * { box-sizing: border-box; }
-@include('partials.icon-css')
         body {
-            margin: 0; min-height: 100vh; color: var(--text);
-            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; padding: 24px;
-            background:
-                radial-gradient(860px 520px at 50% -8%, rgba(139,92,246,.28), transparent 62%),
-                radial-gradient(640px 440px at 100% 110%, rgba(109,40,217,.22), transparent 58%),
-                var(--bg);
-            -webkit-font-smoothing: antialiased;
+            margin: 0; min-height: 100vh; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px;
+            background: radial-gradient(760px 480px at 50% 40%, rgba(139,92,246,.22), transparent 64%), var(--bg);
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; color: var(--muted);
+            transition: opacity .35s ease;
         }
-        .eyebrow {
-            display: inline-flex; align-items: center; gap: 8px; margin-bottom: 22px;
-            font-variant-numeric: tabular-nums; font-size: .74rem; letter-spacing: .18em;
-            text-transform: uppercase; color: var(--accent);
-            padding: 7px 14px; border: 1px solid rgba(167,139,250,.26); border-radius: 999px;
-            background: var(--accent-soft);
+        body.keluar { opacity: 0; }
+
+        /* Latar idle yang sama dengan panel: cahaya ungu bergerak pelan. */
+        .latar { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+        .latar span { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .32; }
+        .latar .a { width: 480px; height: 480px; right: -160px; top: -170px; background: #7c3aed; animation: melayang-a 26s ease-in-out infinite alternate; }
+        .latar .b { width: 420px; height: 420px; left: -170px; bottom: -160px; background: #6d28d9; animation: melayang-b 30s ease-in-out infinite alternate; }
+        @keyframes melayang-a { to { transform: translate(-110px, 90px) scale(1.08); } }
+        @keyframes melayang-b { to { transform: translate(90px, -80px) scale(1.1); } }
+
+        /* Logo senyum Nyaman langsung di atas latar gelap, dengan cahaya kuning lembut. */
+        .logo {
+            width: 150px; height: 150px; display: grid; place-items: center;
+            filter: drop-shadow(0 18px 40px rgba(237,182,82,.35));
+            animation: muncul .7s cubic-bezier(.2,.9,.3,1.25) both, napas 2.6s ease-in-out .7s infinite;
         }
-        .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--grad-bright); box-shadow: 0 0 14px var(--glow); }
-        .eyebrow .seg-u {
-            background: var(--grad-bright); -webkit-background-clip: text; background-clip: text; color: transparent;
+        .logo img { width: 100%; height: auto; display: block; }
+        /* Hanya bergerak, tidak memudar: kalau animasi tertahan (mis. tab di
+           latar belakang), logonya tetap terlihat. */
+        @keyframes muncul { from { transform: scale(.7) translateY(14px); } to { transform: none; } }
+        @keyframes napas { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+
+        .muat { width: 148px; height: 4px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+        .muat span {
+            display: block; height: 100%; width: 0; border-radius: inherit;
+            background: linear-gradient(90deg, #7c3aed, var(--kuning));
+            animation: isi 1.5s ease-in-out .2s forwards;
         }
-        .eyebrow .seg-o { color: var(--accent-2); }
-        h1 { margin: 0 0 14px; font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.05; }
-        h1 .hl {
-            background: var(--grad-bright); -webkit-background-clip: text; background-clip: text; color: transparent;
+        @keyframes isi { to { width: 100%; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .latar span, .logo, .muat span { animation: none; }
+            .muat span { width: 100%; }
         }
-        .desc { max-width: 540px; margin: 0 0 38px; color: var(--muted); font-size: 1.08rem; line-height: 1.6; }
-        .btns { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-        .btn {
-            display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-            min-width: 210px; padding: 15px 26px; border-radius: 999px;
-            font-weight: 700; font-size: 1rem; text-decoration: none;
-            transition: transform .15s, background .2s, border-color .2s, color .2s;
-        }
-        .btn:active { transform: translateY(1px); }
-        .btn-admin { background: var(--grad); color: #ffffff; box-shadow: 0 18px 44px -16px var(--glow); }
-        .btn-admin:hover { background: var(--grad-rev); transform: translateY(-2px); }
-        .btn-staff { background: transparent; color: var(--accent-2); border: 2px solid var(--border-violet); }
-        .btn-staff:hover { border-color: var(--accent-2); background: var(--accent-2-soft); transform: translateY(-2px); }
-        .foot { margin-top: 46px; font-size: .82rem; color: var(--muted); }
     </style>
 </head>
 <body>
-    <span class="eyebrow"><span class="dot"></span> Nyaman<span class="seg-u">Super</span><span class="seg-o">App</span></span>
+    <div class="latar" aria-hidden="true"><span class="a"></span><span class="b"></span></div>
 
-    <h1>Kelola <span class="hl">Penginapan</span><br>dalam satu aplikasi</h1>
+    <div class="logo"><img src="{{ asset('img/logo-senyum.png') }}" alt="Hotel Nyaman"></div>
+    <div class="muat" role="progressbar" aria-label="Memuat"><span></span></div>
 
-    <p class="desc">
-        Stok, hunian kamar, dan laporan harian — staff mencatat, admin memantau.
-        Semua tersinkron secara langsung dalam satu tempat.
-    </p>
+    <script>
+        (function () {
+            const tujuan = @json(route('login'));
+            const tenang = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    <div class="btns">
-        <a href="{{ route('login', ['as' => 'admin']) }}" class="btn btn-admin">Masuk sebagai Admin</a>
-        <a href="{{ route('login', ['as' => 'staff']) }}" class="btn btn-staff">Masuk sebagai Staff</a>
-    </div>
-
-    <p class="foot">NyamanSuperApp — pilih peran untuk masuk ke panel masing-masing.</p>
+            // replace(), bukan pindah biasa: tombol Kembali dari halaman login
+            // tidak memutar ulang halaman pembuka.
+            setTimeout(function () {
+                document.body.classList.add('keluar');
+                setTimeout(function () { window.location.replace(tujuan); }, 330);
+            }, tenang ? 500 : 1700);
+        })();
+    </script>
 </body>
 </html>

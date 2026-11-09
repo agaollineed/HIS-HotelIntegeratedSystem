@@ -12,6 +12,7 @@ class Booking extends Model
     protected $fillable = [
         'room_id',
         'grup',
+        'pindah_dari_id',
         'nama_tamu',
         'telepon',
         'breakfast',
@@ -23,6 +24,7 @@ class Booking extends Model
         'foto_ktp',
         'foto_pelunasan',
         'foto_bayar_awal',
+        'foto_bayar_tambahan',
         'checked_in_at',
         'checkin_menit_awal',
         'checked_out_at',
@@ -30,6 +32,8 @@ class Booking extends Model
         'checkout_menit',
         'late_ditandai_at',
         'late_ditandai_by',
+        'perpanjang_otomatis_malam',
+        'perpanjang_otomatis_at',
         'foto_pembayaran_late',
         'foto_kartu',
         'checkout_kondisi_ok',
@@ -47,6 +51,7 @@ class Booking extends Model
         'check_in'           => 'date',
         'check_out'          => 'date',
         'durasi'             => 'integer',
+        'pindah_dari_id'     => 'integer',
         'breakfast'          => 'boolean',
         'dp_nominal'         => 'integer',
         'diskon_nominal'     => 'integer',
@@ -56,6 +61,8 @@ class Booking extends Model
         'checked_out_at'      => 'datetime',
         'checkout_menit'      => 'integer',
         'late_ditandai_at'    => 'datetime',
+        'perpanjang_otomatis_malam' => 'integer',
+        'perpanjang_otomatis_at'    => 'datetime',
         'checkout_kondisi_ok' => 'boolean',
     ];
 
@@ -124,6 +131,12 @@ class Booking extends Model
      */
     public function biayaEarlyCheckin(?CarbonInterface $waktu = null): int
     {
+        // Pindahan bukan kedatangan: tamunya sudah menginap sejak kemarin,
+        // jadi masuk ke kamar baru pagi hari tidak menambah jam pakai kamar.
+        if ($this->isPindahan()) {
+            return 0;
+        }
+
         $waktu ??= $this->checked_in_at;
 
         if (! $waktu || ! $this->check_in) {
@@ -275,6 +288,13 @@ class Booking extends Model
     public const CO_TELAT = 'telat';  // lewat dari 12.00
 
     /**
+     * Kamar ditinggalkan karena tamu PINDAH ke kamar lain di tengah masa
+     * menginap. Bukan kepergian: tamunya masih di hotel, hanya berganti
+     * kamar. Dibedakan supaya tidak terbaca sebagai early check-out.
+     */
+    public const CO_PINDAH = 'pindah';
+
+    /**
      * Tamu sudah melakukan check-in (foto KTP sudah diunggah saat kedatangan).
      */
     /**
@@ -335,6 +355,10 @@ class Booking extends Model
      */
     public function menitEarlyCheckinPada(CarbonInterface $waktu): int
     {
+        if ($this->isPindahan()) {
+            return 0;
+        }
+
         $batas = $this->batasCheckin();
         $w     = $waktu->copy()->startOfMinute();
 
@@ -356,6 +380,14 @@ class Booking extends Model
     {
         $batas = $this->batasCheckout();
         $w     = $waktu->copy()->startOfMinute();
+
+        // Tamu yang diperpanjang otomatis karena over late lalu pulang pada
+        // malam itu juga: ia terlambat dari tanggal check-out ASLI, bukan
+        // pergi lebih awal dari malam tambahan. Biayanya sudah masuk sebagai
+        // malam tambahan di tagihan, jadi tidak ada biaya late lagi.
+        if ($this->keluarPadaMalamPerpanjangan($w)) {
+            return [self::CO_TELAT, (int) $this->batasCheckoutAsli()->diffInMinutes($w)];
+        }
 
         // Satu ambang menutup dua kasus sekaligus: pergi pagi buta pada hari
         // check-out, dan pergi sehari lebih awal (yang otomatis juga jatuh
@@ -379,7 +411,37 @@ class Booking extends Model
     {
         return $this->isCheckedIn()
             && ! $this->isCheckedOut()
-            && now()->greaterThan($this->batasCheckout());
+            && now()->greaterThan($this->batasCheckout())
+            // Kamar yang berlanjut ke kamar lain ditutup saat tamu pindah,
+            // bukan lewat check-out — jadi bukan late check-out.
+            && ! $this->punyaLanjutan();
+    }
+
+    /**
+     * Masa menginap ini pernah ditambah sistem karena tamunya masih di kamar
+     * lewat 17.00 pada tanggal check-out (over late = dianggap extend).
+     */
+    public function diperpanjangOtomatis(): bool
+    {
+        return (int) $this->perpanjang_otomatis_malam > 0;
+    }
+
+    /** Batas check-out sebelum malam perpanjangan terakhir ditambahkan. */
+    public function batasCheckoutAsli(): \Illuminate\Support\Carbon
+    {
+        return $this->batasCheckout()->subDay();
+    }
+
+    /**
+     * Kepergian pada $waktu terjadi di hari yang sama dengan perpanjangan
+     * otomatis terakhir — tamu akhirnya pulang malam itu juga.
+     */
+    public function keluarPadaMalamPerpanjangan(CarbonInterface $waktu): bool
+    {
+        return $this->perpanjang_otomatis_at !== null
+            && $this->check_out !== null
+            && $waktu->toDateString() === $this->check_out->copy()->subDay()->toDateString()
+            && $waktu->greaterThan($this->batasCheckoutAsli());
     }
 
     /** Sudah lewat 12.00 dan diakui staff lewat toast. */
@@ -487,6 +549,37 @@ class Booking extends Model
         return in_array($statusBayar, [self::BAYAR_LUNAS, self::BAYAR_DP], true);
     }
 
+    /**
+     * Pesanan ini sudah punya bukti pembayaran dalam bentuk apa pun.
+     *
+     * Bukti bisa masuk lewat tiga pintu: saat pesanan dibuat (bayar awal),
+     * saat check-in (pelunasan), atau saat tagihan naik (bayar tambahan).
+     * Semua dihitung — pesanan yang dilunasi saat check-in sudah punya
+     * buktinya, dan tidak boleh diminta lagi hanya karena kamarnya dipindah.
+     *
+     * @param  iterable<int, self>  $anggota
+     */
+    public static function adaBuktiBayarDi($anggota): bool
+    {
+        return collect($anggota)->contains(fn (self $b) => $b->foto_bayar_awal !== null
+            || $b->foto_pelunasan !== null
+            || $b->foto_bayar_tambahan !== null);
+    }
+
+    /**
+     * Uang yang diakui sudah diterima untuk status & nominal tertentu.
+     * Versi statis dibayar(), dipakai untuk membandingkan sebelum/sesudah
+     * perubahan tanpa harus menyimpan dulu.
+     */
+    public static function dibayarUntuk(string $status, int $dp, int $tagihan): int
+    {
+        return match ($status) {
+            self::BAYAR_LUNAS => $tagihan,
+            self::BAYAR_DP    => min($tagihan, max(0, $dp)),
+            default           => 0,
+        };
+    }
+
     /** Versi objek dari butuhBuktiBayarAwal(). */
     public function wajibBuktiBayarAwal(): bool
     {
@@ -551,7 +644,8 @@ class Booking extends Model
     {
         return $this->checkoutTelat()
             && $this->checked_out_at !== null
-            && $this->overLatePada($this->checked_out_at);
+            && ($this->overLatePada($this->checked_out_at)
+                || $this->keluarPadaMalamPerpanjangan($this->checked_out_at));
     }
 
     public function earlyCheckin(): bool
@@ -586,12 +680,27 @@ class Booking extends Model
         return $jam . ' jam' . ($sisa > 0 ? ' ' . $sisa . ' menit' : '');
     }
 
+    /** Label status bila kamar ini di-check-out pada $waktu (pratinjau). */
+    public function labelCheckoutPada(CarbonInterface $waktu): string
+    {
+        [$status] = $this->statusCheckoutPada($waktu);
+
+        return match ($status) {
+            self::CO_AWAL  => 'Early check-out',
+            self::CO_TELAT => $this->overLatePada($waktu) || $this->keluarPadaMalamPerpanjangan($waktu)
+                ? 'Over late check-out'
+                : 'Late check-out',
+            default        => 'Tepat waktu',
+        };
+    }
+
     public function labelStatusCheckout(): string
     {
         return match ($this->checkout_status) {
             self::CO_AWAL  => 'Early check-out',
             self::CO_TELAT => $this->overLateCheckout() ? 'Over late check-out' : 'Late check-out',
             self::CO_TEPAT => 'Check-out tepat waktu',
+            self::CO_PINDAH => 'Pindah kamar',
             default        => 'Belum check-out',
         };
     }
@@ -675,6 +784,38 @@ class Booking extends Model
     public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
+    }
+
+    /** Baris kamar sebelumnya, bila baris ini hasil pindah kamar per hari. */
+    public function pindahDari(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'pindah_dari_id');
+    }
+
+    /** Baris kamar lanjutan, bila tamu pindah dari kamar ini ke kamar lain. */
+    public function pindahKe(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(self::class, 'pindah_dari_id');
+    }
+
+    /** Baris ini melanjutkan masa menginap dari kamar lain. */
+    public function isPindahan(): bool
+    {
+        return $this->pindah_dari_id !== null;
+    }
+
+    /** Masa menginap baris ini berlanjut di kamar lain. */
+    public function punyaLanjutan(): bool
+    {
+        return $this->relationLoaded('pindahKe')
+            ? $this->pindahKe !== null
+            : $this->pindahKe()->exists();
+    }
+
+    /** Pindahan yang menunggu tamunya benar-benar masuk ke kamar baru. */
+    public function pindahanTertunda(): bool
+    {
+        return $this->isPindahan() && ! $this->isCheckedIn() && ! $this->isCheckedOut();
     }
 
     public function creator(): BelongsTo

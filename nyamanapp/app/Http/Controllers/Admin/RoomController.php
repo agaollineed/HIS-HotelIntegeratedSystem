@@ -25,6 +25,7 @@ class RoomController extends Controller
     public function index(Request $request)
     {
         [$month, $selected] = $this->monthAndSelected($request);
+        [$cari, $hasilCari] = $this->hasilPencarian($request);
 
         // Pengajuan dari staff ditaruh di halaman ini, bukan di menu terpisah:
         // keputusannya butuh gambaran hunian hari itu, dan gambaran itu ada di
@@ -35,9 +36,12 @@ class RoomController extends Controller
             ->get();
 
         return view('admin.rooms.index', [
+            'cari'          => $cari,
+            'hasilCari'     => $hasilCari,
             'month'         => $month,
             'selected'      => $selected,
             'permintaan'    => $permintaan,
+            'alarm'         => \App\Support\AlarmCheckout::kumpulkan(),
             'terisiPerHari' => $this->terisiPerHari($month),
             'prevMonth'     => $month->copy()->subMonth()->format('Y-m'),
             'nextMonth'     => $month->copy()->addMonth()->format('Y-m'),
@@ -83,19 +87,30 @@ class RoomController extends Controller
 
         // Nomor kamar segrup utk detail (booking lama tanpa grup = dirinya sendiri).
         $perGrup = $menginap->groupBy(fn ($b) => $b->grup ?? ('single-' . $b->id));
+
+        // Tagihan berlaku untuk SATU PESANAN — seluruh kamarnya, termasuk
+        // kamar yang tidak menginap malam ini (kamar dengan tanggal berbeda,
+        // atau kamar hasil pindah per hari). Dulu hanya kamar malam ini yang
+        // dijumlahkan, sehingga tagihan di panel lebih kecil dari yang
+        // sebenarnya. Dimuat sekali di sini, bukan per baris di dalam view.
+        $kodeGrup = $menginap->pluck('grup')->filter()->unique()->values();
+        $semuaAnggota = $kodeGrup->isEmpty()
+            ? collect()
+            : Booking::with('room')->whereIn('grup', $kodeGrup)->get()->groupBy('grup');
+
         foreach ($menginap as $b) {
-            $anggota = $perGrup->get($b->grup ?? ('single-' . $b->id), collect());
+            $anggota = $b->grup ? $semuaAnggota->get($b->grup, collect([$b])) : collect([$b]);
 
             $b->grup_rooms = $anggota
+                ->sortBy(fn ($m) => $m->check_in->format('Ymd') . sprintf('%06d', (int) preg_replace('/\D/', '', (string) $m->room?->nomor)))
                 ->map(fn ($m) => $m->room?->nomor)
                 ->filter()
+                ->unique()
                 ->implode(', ');
 
-            // Tagihan berlaku untuk SATU PESANAN. Dihitung di sini dari anggota
-            // grup yang sudah dimuat — kalau dihitung di dalam view, tiap baris
-            // kamar akan menembak query sendiri ke basis data.
             $b->grup_total   = Booking::totalPesananDari($anggota);
             $b->grup_tagihan = $b->tagihanPesanan($b->grup_total);
+            $b->grup_semua   = $anggota;
         }
 
         $kamarTerisi = $menginap->pluck('room_id')->unique()->count();

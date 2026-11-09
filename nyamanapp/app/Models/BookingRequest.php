@@ -19,6 +19,7 @@ class BookingRequest extends Model
         'booking_id',
         'jenis',
         'room_id_baru',
+        'pindah_mulai',
         'nama_tamu_baru',
         'telepon_baru',
         'check_in_baru',
@@ -33,6 +34,7 @@ class BookingRequest extends Model
 
     protected $casts = [
         'check_in_baru' => 'date',
+        'pindah_mulai'  => 'date',
         'durasi_baru'   => 'integer',
         'diputus_at'    => 'datetime',
     ];
@@ -147,6 +149,15 @@ class BookingRequest extends Model
                 'dari'  => $b->room?->nomor ?? '—',
                 'jadi'  => $this->roomBaru?->nomor ?? '—',
             ];
+
+            if ($this->pindahPerHari()) {
+                $baris[] = [
+                    'label' => 'Mulai Pindah',
+                    'dari'  => $b->check_in->translatedFormat('j M Y'),
+                    'jadi'  => $this->pindah_mulai->translatedFormat('j M Y')
+                        . ' (' . (int) $this->pindah_mulai->diffInDays($b->check_out) . ' malam)',
+                ];
+            }
         }
 
         if ($this->nama_tamu_baru !== null && $this->nama_tamu_baru !== $b->nama_tamu) {
@@ -188,6 +199,41 @@ class BookingRequest extends Model
     public function usang(): bool
     {
         return $this->perubahan() === [];
+    }
+
+    /**
+     * Rencana pindah kamar untuk pengajuan ini, dihitung terhadap keadaan
+     * SEKARANG — termasuk siapa yang akan ditukar bila kamar tujuan terisi.
+     *
+     * Null bila pengajuan ini bukan pindah kamar, atau booking/kamarnya
+     * sudah tidak ada.
+     */
+    public function rencanaPindah(): ?\App\Support\PindahKamarHarian
+    {
+        $b = $this->booking;
+
+        if ($this->jenis !== self::PINDAH_KAMAR || $b === null || $this->roomBaru === null) {
+            return null;
+        }
+
+        // Tanpa tanggal mulai (atau sama dengan check-in) = seluruh masa
+        // menginap pindah, dengan aturan tukar kamar yang lama.
+        return \App\Support\PindahKamarHarian::rencanakan(
+            $b,
+            $this->roomBaru,
+            ($this->pindah_mulai ?? $b->check_in)->copy(),
+        );
+    }
+
+    /** Pengajuan ini memindah kamar mulai malam tertentu, bukan seluruhnya. */
+    public function pindahPerHari(): bool
+    {
+        $b = $this->booking;
+
+        return $this->jenis === self::PINDAH_KAMAR
+            && $b !== null
+            && $this->pindah_mulai !== null
+            && $this->pindah_mulai->gt($b->check_in->copy()->startOfDay());
     }
 
     /** Ringkasan satu baris untuk daftar: "Kamar 101 → 205". */

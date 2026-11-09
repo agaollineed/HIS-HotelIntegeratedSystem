@@ -46,7 +46,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Redirect kembali ke halaman welcome (sebelum login/register)
+        // Kembali ke halaman pembuka, yang lalu membawa ke halaman login.
         return redirect()->route('welcome');
     }
 }

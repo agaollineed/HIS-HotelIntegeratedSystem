@@ -5,6 +5,11 @@
 @push('head')
 <style>
     .co-card { padding: 28px; max-width: 640px; }
+    .co-status[hidden], #bayar-box[hidden] { display: none !important; }
+    .co-lunasi { display: flex; align-items: center; gap: 9px; margin-top: 10px; font-weight: 700; color: var(--text); cursor: pointer; }
+    .co-lunasi input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .co-total { font-size: .86rem; color: var(--muted); margin-bottom: 10px; }
+    .co-total b { color: var(--text); font-variant-numeric: tabular-nums; }
 
     .co-summary {
         display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
@@ -80,67 +85,91 @@
                 <div class="val mono">{{ $groupRooms->implode(', ') }}</div>
             </div>
             <div>
-                <div class="lbl">Masa Sewa Berakhir</div>
-                <div class="val mono">{{ $booking->batasCheckout()->translatedFormat('j M, H:i') }}</div>
-            </div>
-            <div>
                 <div class="lbl">Sekarang</div>
                 <div class="val mono">{{ now()->format('H:i') }}</div>
             </div>
-            <div>
-                <div class="lbl">Check-in</div>
-                <div class="val mono">{{ $booking->checked_in_at?->translatedFormat('j M, H:i') ?? '—' }}</div>
-            </div>
         </div>
 
-        @if ($status === \App\Models\Booking::CO_AWAL)
-            <div class="co-status awal">
-                @include('partials.icon', ['name' => 'alert', 'class' => 'ic-lg'])
-                <span>
-                    <b>Early check-out</b>
-                </span>
-            </div>
-        @elseif ($status === \App\Models\Booking::CO_TELAT)
-            <div class="co-status telat">
-                @include('partials.icon', ['name' => 'clock', 'class' => 'ic-lg'])
-                <span>
-                    <b>{{ $overLate ? 'Over late check-out' : 'Late check-out' }} —
-                        biaya {{ \App\Models\Booking::rupiah($biayaLate) }} per kamar</b>
-                    {{ $overLate
-                        ? 'Lewat ' . \App\Models\Booking::JAM_LATE_SETENGAH . ' — dihitung 1 malam penuh'
-                        : '50% harga malam (berlaku sampai ' . \App\Models\Booking::JAM_LATE_SETENGAH . ')' }}.
-                    Bukti pembayaran kelebihan jam wajib diunggah.
-                </span>
-            </div>
-        @else
-            <div class="co-status tepat">
-                @include('partials.icon', ['name' => 'check', 'class' => 'ic-lg'])
-                <span><b>Check-out tepat waktu</b></span>
-            </div>
-        @endif
-
-        <form method="POST" action="{{ \App\Support\Panel::rute('rooms.checkout.store', $booking) }}" enctype="multipart/form-data">
+        <form method="POST" action="{{ \App\Support\Panel::rute('rooms.checkout.store', $booking) }}" enctype="multipart/form-data"
+              data-sisa="{{ $sisaBayar }}" data-lain="{{ $kamarLain }}" id="form-checkout">
             @csrf
-            {{-- Lingkup dibawa dari tautan yang diklik: 'one' hanya kamar ini,
-                 'group' seluruh kamar pesanan. Dikirim ulang lewat formulir
-                 supaya keputusan di layar dan yang dikerjakan server sama. --}}
-            <input type="hidden" name="scope" value="{{ $scope ?? 'group' }}">
+            @php
+                // Status, batas waktu, dan biaya dihitung per kamar: tamu dalam
+                // satu pesanan bisa pulang tepat waktu dan terlambat bersamaan.
+                $sekarang = now();
+                $baris = $calon->map(function ($m) use ($sekarang) {
+                    [$st] = $m->statusCheckoutPada($sekarang);
+                    $biaya = $m->biayaLateCheckout($sekarang);
+                    $extend = $m->keluarPadaMalamPerpanjangan($sekarang);
 
-            @if ($butuhBayar)
-                @include('partials.foto-uploader', [
-                    'name'  => 'foto_pembayaran',
-                    'ikon'  => 'clipboard',
-                    'judul' => 'Bukti pembayaran late check-out',
-                    'pesan' => 'Bukti pembayaran kelebihan jam.',
-                    'hint'  => 'Wajib.',
-                ])
+                    return [
+                        'id'      => $m->id,
+                        'nomor'   => $m->room?->nomor ?? '—',
+                        'info'    => 'Batas ' . $m->batasCheckout()->translatedFormat('j M, H:i')
+                            . ' · check-in ' . ($m->checked_in_at?->translatedFormat('j M, H:i') ?? '—'),
+                        'label'   => $m->labelCheckoutPada($sekarang),
+                        'kelas'   => $st === \App\Models\Booking::CO_TEPAT ? 'ok' : 'awas',
+                        'catatan' => match (true) {
+                            $extend => 'Sudah dihitung extend ' . (int) $m->perpanjang_otomatis_malam . ' malam di tagihan. Tidak ada biaya late terpisah.',
+                            $biaya > 0 => 'Biaya ' . \App\Models\Booking::rupiah($biaya) . ($m->overLatePada($sekarang)
+                                ? ' — lewat ' . \App\Models\Booking::JAM_LATE_SETENGAH . ', dihitung 1 malam penuh.'
+                                : ' — 50% harga malam, berlaku sampai ' . \App\Models\Booking::JAM_LATE_SETENGAH . '.'),
+                            default => null,
+                        },
+                        'data'    => ['biaya' => $biaya],
+                    ];
+                })->all();
+                $adaBiaya = collect($baris)->sum(fn ($b) => $b['data']['biaya']) > 0;
+            @endphp
+
+            @include('partials.pilih-kamar', [
+                'baris'         => $baris,
+                'terpilih'      => $terpilih,
+                'judul'         => 'Pilih kamar yang check-out sekarang',
+                'tampilTunggal' => true,
+            ])
+
+            {{-- Sisa tagihan milik pesanan: wajib lunas saat kamar terakhir
+                 keluar. Selama ada kamar lain, tamu boleh melunasinya nanti. --}}
+            @if ($sisaBayar > 0)
+                <div class="co-status telat" id="sisa-wajib">
+                    @include('partials.icon', ['name' => 'alert', 'class' => 'ic-lg'])
+                    <span>
+                        <b>Masih ada sisa tagihan {{ \App\Models\Booking::rupiah($sisaBayar) }}</b>
+                        {{ $booking->ringkasanBayar() }}. Tagikan sebelum tamu pulang; bukti pelunasannya wajib diunggah.
+                    </span>
+                </div>
+                <div class="co-status telat" id="sisa-nanti" hidden>
+                    @include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-lg'])
+                    <span>
+                        <b>Sisa tagihan {{ \App\Models\Booking::rupiah($sisaBayar) }} bisa ditagih nanti</b>
+                        Masih ada kamar lain yang belum check-out, jadi sisanya wajib lunas saat kamar terakhir keluar.
+                        <label class="co-lunasi">
+                            <input type="checkbox" name="lunasi_sisa" value="1" id="lunasi-sisa" @checked(old('lunasi_sisa'))>
+                            Tamu melunasi sisa tagihan sekarang
+                        </label>
+                    </span>
+                </div>
+            @endif
+
+            @if ($sisaBayar > 0 || $adaBiaya)
+                <div id="bayar-box">
+                    <div class="co-total">Yang harus dibayar sekarang: <b id="bayar-total">—</b></div>
+                    @include('partials.foto-uploader', [
+                        'name'  => 'foto_pembayaran',
+                        'ikon'  => 'clipboard',
+                        'judul' => 'Bukti pembayaran',
+                        'pesan' => 'Bukti pembayaran late check-out atau sisa tagihan.',
+                        'hint'  => 'Wajib.',
+                    ])
+                </div>
             @endif
 
             @include('partials.foto-uploader', [
                 'name'  => 'foto_kartu',
                 'ikon'  => 'key-card',
                 'judul' => 'Kartu kunci yang dikembalikan',
-                'pesan' => 'Potret kartu ' . $groupRooms->implode(', ') . ' yang dikembalikan.',
+                'pesan' => 'Potret kartu kamar yang check-out dan dikembalikan.',
                 'hint'  => 'Wajib. Pastikan nomor kartu terbaca.',
             ])
 
@@ -209,19 +238,46 @@
     const btn     = document.getElementById('btn-checkout');
     const label   = document.getElementById('btn-label');
     const catatan = document.getElementById('catatan_kerusakan');
+    const form    = document.getElementById('form-checkout');
+    const kamar   = Array.from(document.querySelectorAll('.js-kamar'));
+    const bayar   = document.getElementById('bayar-box');
+    const total   = document.getElementById('bayar-total');
+    const wajib   = document.getElementById('sisa-wajib');
+    const nanti   = document.getElementById('sisa-nanti');
+    const lunasi  = document.getElementById('lunasi-sisa');
 
     if (!radios.length || !btn) return;
+
+    const SISA = parseInt(form.dataset.sisa, 10) || 0;
+    const LAIN = parseInt(form.dataset.lain, 10) || 0;
+    const rupiah = n => 'Rp ' + n.toLocaleString('id-ID');
+    const terpilih = () => kamar.filter(k => k.type === 'hidden' || k.checked);
+
+    // Yang wajib dibayar mengikuti kamar yang dicentang.
+    function hitungBayar() {
+        const pilih = terpilih();
+        const biaya = pilih.reduce((n, k) => n + (parseInt(k.dataset.biaya, 10) || 0), 0);
+        const terakhir = pilih.length === kamar.length && LAIN === 0;
+        const lunas = SISA > 0 && (terakhir || (lunasi && lunasi.checked));
+
+        if (wajib) wajib.hidden = !terakhir;
+        if (nanti) nanti.hidden = terakhir;
+        if (bayar) bayar.hidden = !(biaya > 0 || lunas);
+        if (total) total.textContent = rupiah(biaya + (lunas ? SISA : 0));
+    }
 
     const pilihan = () => (radios.find(r => r.checked) || {}).value || null;
 
     // Kotak unggah di bagian kerusakan hanya wajib bila "rusak" dipilih.
     function uploaderWajib() {
         return Array.from(document.querySelectorAll('[data-uploader]')).filter(function (k) {
+            if (bayar && bayar.hidden && bayar.contains(k)) return false;
             return !(kotak && kotak.contains(k)) || pilihan() === 'rusak';
         });
     }
 
     function periksa() {
+        hitungBayar();
         const p = pilihan();
         if (kotak) kotak.hidden = p !== 'rusak';
 
@@ -235,18 +291,23 @@
         const catatanLengkap = p !== 'rusak' || (catatan && catatan.value.trim().length > 0);
 
         // Tombol tetap terkunci selama kondisi kamar belum dinyatakan.
-        const lengkap = p !== null && kotakLengkap && catatanLengkap;
+        const jumlah = terpilih().length;
+        const lengkap = jumlah > 0 && p !== null && kotakLengkap && catatanLengkap;
 
         btn.disabled = !lengkap;
         btn.style.opacity = lengkap ? '' : '.45';
         btn.style.cursor  = lengkap ? '' : 'not-allowed';
-        btn.title = p === null ? 'Pilih kondisi kamar terlebih dahulu'
+        btn.title = jumlah === 0 ? 'Pilih minimal satu kamar'
+            : p === null ? 'Pilih kondisi kamar terlebih dahulu'
             : (lengkap ? '' : 'Lengkapi foto dan keterangan yang diminta');
 
-        if (label) label.textContent = p === 'rusak' ? 'Check-out & Kirim Laporan' : 'Catat Check-out';
+        if (label) label.textContent = (p === 'rusak' ? 'Check-out & Kirim Laporan' : 'Catat Check-out')
+            + (kamar.length > 1 && jumlah > 0 ? ' (' + jumlah + ' kamar)' : '');
     }
 
     radios.forEach(r => r.addEventListener('change', periksa));
+    kamar.forEach(k => k.addEventListener('change', periksa));
+    if (lunasi) lunasi.addEventListener('change', periksa);
     if (catatan) catatan.addEventListener('input', periksa);
     document.querySelectorAll('[data-uploader] [data-role="main"]').forEach(function (inp) {
         inp.addEventListener('change', periksa);

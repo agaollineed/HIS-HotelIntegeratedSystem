@@ -2,153 +2,189 @@
 
 @section('title', 'Dashboard')
 
+@php
+    $admin = Auth::user()->isAdmin();
+
+    // Pintasan fitur untuk staff, dalam satu carousel. Admin dan superadmin
+    // tidak memakainya: semua fiturnya sudah ada di menu samping, dan
+    // berandanya berisi grafik pendapatan serta jadwal hari ini.
+    // Setiap baris: [judul, ikon, url, kalimat singkat, lencana (opsional)].
+    $slides = $admin ? [] : [
+        ['Kamar', 'bed', route('staff.rooms.index'), 'Catat booking, check-in, pindah kamar, dan check-out.', null],
+        ['Invoice', 'clipboard', route('staff.invoices.index'), 'Buat dan cetak tagihan tamu.', null],
+        ['Stok', 'box', route('staff.stocks.index'), 'Tambah atau kurangi jumlah stok harian.', null],
+        ['Jadwal & Absensi', 'clock', route('staff.absensi.index'), 'Susun shift H-1 dan absen dengan foto.', null],
+        ['Laporan', 'inbox', route('staff.reports.index'), 'Kirim kendala ke admin dan pantau statusnya.', null],
+    ];
+@endphp
+
 @push('head')
 <style>
-    /* Admin: 3 kartu fitur + 1 kartu jadwal vertikal di sampingnya.
-       Staff: kartu fitur saja, selebar halaman. */
     .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 330px); gap: 18px; align-items: start; }
-    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-    .dash-grid .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .card-link {
-        position: relative; display: block; padding: 26px; overflow: hidden;
-        color: var(--text); text-decoration: none;
-        transition: transform .18s, box-shadow .18s;
-    }
-    /* Garis aksen tipis di atas kartu — warnanya mengikuti aksen kartu. */
-    .card-link::before {
-        content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
-        background: var(--accent); opacity: .85;
-    }
-    .card-link:hover { transform: translateY(-4px); box-shadow: 0 30px 60px -26px var(--accent-glow); }
-    .card-link .icon {
-        width: 54px; height: 54px; border-radius: 14px; margin-bottom: 16px;
-        display: flex; align-items: center; justify-content: center;
-        background: var(--accent-soft); border: 1px solid var(--border); color: var(--accent);
+    .dash-grid > * { min-width: 0; }
+    .tautan-laporan { color: var(--warn); font-weight: 700; text-decoration: none; }
+    .tautan-laporan:hover { text-decoration: underline; }
+
+    /* Lambaian tangan di sapaan */
+    .lambai { display: inline-block; transform-origin: 70% 80%; animation: lambai 3.2s ease-in-out infinite; }
+    @keyframes lambai {
+        0%, 60%, 100% { transform: rotate(0); }
+        65% { transform: rotate(16deg); } 70% { transform: rotate(-8deg); }
+        75% { transform: rotate(14deg); } 80% { transform: rotate(-4deg); } 85% { transform: rotate(10deg); }
     }
 
-    /* Varian oranye (kartu Kamar) — aksen sekunder. */
-    .card-link.accent-orange::before { background: var(--accent-2); }
-    .card-link.accent-orange:hover { box-shadow: 0 30px 60px -26px var(--accent-2-glow); }
-    .card-link.accent-orange .icon { background: var(--accent-2-soft); border-color: var(--border-orange); }
-    .card-link h3 { margin: 0 0 6px; font-size: 1.12rem; font-weight: 800; letter-spacing: -.015em; }
-    .card-link p { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.5; }
-    .card-link .count {
-        position: absolute; top: 18px; right: 18px;
-        font-variant-numeric: tabular-nums; font-size: .72rem; font-weight: 700;
-        padding: 4px 11px; border-radius: 999px;
-        background: var(--grad); color: #ffffff; box-shadow: 0 8px 20px -8px var(--accent-glow);
+    /* ---------- Carousel pintasan ---------- */
+    .karosel { position: relative; padding: 18px 18px 14px; margin-bottom: 18px; }
+    .karosel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .karosel-head h2 { margin: 0; font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+    .karosel-nav { display: flex; gap: 6px; }
+    .karosel-nav button {
+        width: 34px; height: 34px; border-radius: 999px; cursor: pointer; display: grid; place-items: center;
+        background: rgba(255,255,255,.03); color: var(--text); border: 1px solid var(--border-2);
     }
+    .karosel-nav button:hover { border-color: var(--accent); color: var(--accent); }
+    .karosel-jalur {
+        display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 24px) / 3); gap: 12px;
+        overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
+        padding-bottom: 2px;
+    }
+    .karosel-jalur::-webkit-scrollbar { display: none; }
+    .slide {
+        scroll-snap-align: start; position: relative; display: flex; flex-direction: column; gap: 10px;
+        padding: 18px; border-radius: 16px; text-decoration: none; color: var(--text);
+        background: linear-gradient(160deg, rgba(139,92,246,.16), rgba(139,92,246,.03));
+        border: 1px solid var(--border); min-height: 150px;
+        transition: transform .18s, box-shadow .18s, border-color .18s;
+    }
+    .slide:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 22px 44px -26px var(--accent-glow); }
+    .slide .ikon {
+        width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+        background: var(--accent-soft); border: 1px solid var(--border); color: var(--accent);
+    }
+    .slide b { font-size: 1.02rem; font-weight: 800; letter-spacing: -.01em; }
+    .slide span.t { font-size: .84rem; color: var(--muted); line-height: 1.45; }
+    .slide .lencana {
+        position: absolute; top: 14px; right: 14px; font-size: .7rem; font-weight: 800;
+        padding: 3px 10px; border-radius: 999px; background: var(--grad); color: #fff;
+    }
+    .karosel-titik { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+    .karosel-titik button {
+        width: 7px; height: 7px; padding: 0; border-radius: 999px; border: 0; cursor: pointer;
+        background: var(--border); transition: width .2s, background .2s;
+    }
+    .karosel-titik button[aria-current="true"] { width: 22px; background: var(--accent); }
+
     @media (max-width: 1100px) {
         .dash-grid { grid-template-columns: 1fr; }
-        .dash-grid .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
-    @media (max-width: 860px) {
-        .cards, .dash-grid .cards { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 760px) {
+        .karosel-jalur { grid-auto-columns: calc((100% - 12px) / 2); }
     }
-    @media (max-width: 600px) {
-        .cards, .dash-grid .cards { grid-template-columns: 1fr; }
+    @media (max-width: 520px) {
+        .karosel-jalur { grid-auto-columns: 86%; }
     }
+    @media (prefers-reduced-motion: reduce) { .lambai { animation: none; } .karosel-jalur { scroll-behavior: auto; } }
 </style>
 @endpush
 
 @section('content')
     <div class="page-head">
-        <h1>Hai, {{ Auth::user()->name }}</h1>
+        <h1>Hai, {{ Auth::user()->name }} <span class="lambai" aria-hidden="true">👋🏻</span></h1>
         <p>
-            @if (Auth::user()->isAdmin())
-                Pantau stok, hunian kamar, dan laporan dari staff — semuanya dari satu tempat.
-            @else
-                Catat stok, hunian kamar, dan kirim laporan ke admin — semuanya dari satu tempat.
+            {{ now()->translatedFormat('l, j F Y') }}
+            @if ($admin && $openReports > 0)
+                · <a href="{{ route('admin.reports.index') }}" class="tautan-laporan">{{ $openReports }} laporan terbuka</a>
             @endif
         </p>
     </div>
 
-    @if (Auth::user()->isAdmin())
-        @include('admin.revenue.chart')
-    @endif
+    @include('partials.alarm-checkout')
 
-    <div class="{{ Auth::user()->isAdmin() ? 'dash-grid' : '' }}">
-    <div class="cards">
-        @if (Auth::user()->isAdmin())
-            <a href="{{ route('admin.stocks.index') }}" class="card card-link">
-                <div class="icon">@include('partials.icon', ['name' => 'box', 'class' => 'ic-xl'])</div>
-                <h3>Stok</h3>
-                <p>Kelola item &amp; harga, tambah/kurangi jumlah, lengkap dengan log perubahan &amp; export Excel.</p>
-            </a>
-            <a href="{{ route('admin.rooms.index') }}" class="card card-link accent-orange">
-                <div class="icon">@include('partials.icon', ['name' => 'bed', 'class' => 'ic-xl'])</div>
-                <h3>Kamar</h3>
-                <p>Kalender hunian: jumlah kamar terisi per tanggal beserta detail tiap tamu.</p>
-            </a>
-            <a href="{{ route('admin.tamu.index') }}" class="card card-link accent-orange">
-                <div class="icon">@include('partials.icon', ['name' => 'users', 'class' => 'ic-xl'])</div>
-                <h3>Riwayat Tamu</h3>
-                <p>Profil tamu berulang: jumlah kunjungan, kamar, dan malam menginapnya.</p>
-            </a>
-            @if (Auth::user()->bolehKelolaAkun())
-                <a href="{{ route('admin.akun.index') }}" class="card card-link">
-                    <div class="icon">@include('partials.icon', ['name' => 'key-card', 'class' => 'ic-xl'])</div>
-                    <h3>Kelola Akun</h3>
-                    <p>Tambah akun, ganti kata sandi, dan nonaktifkan staff yang keluar.</p>
+    @unless ($admin)
+    {{-- Pintasan fitur dalam satu carousel: bergeser sendiri, berhenti saat
+         disentuh atau diarahkan kursor, dan bisa digeser dengan jari. --}}
+    <section class="card karosel" id="karosel" aria-roledescription="carousel" aria-label="Pintasan fitur">
+        <div class="karosel-head">
+            <h2>Pintasan</h2>
+            <div class="karosel-nav">
+                <button type="button" data-arah="-1" aria-label="Sebelumnya">@include('partials.icon', ['name' => 'chevron-left', 'class' => 'ic-xs'])</button>
+                <button type="button" data-arah="1" aria-label="Berikutnya">@include('partials.icon', ['name' => 'chevron-right', 'class' => 'ic-xs'])</button>
+            </div>
+        </div>
+        <div class="karosel-jalur" id="karosel-jalur">
+            @foreach ($slides as [$judul, $ikon, $url, $kalimat, $lencana])
+                <a href="{{ $url }}" class="slide" aria-roledescription="slide" aria-label="{{ $judul }}">
+                    @if ($lencana)<span class="lencana">{{ $lencana }}</span>@endif
+                    <span class="ikon">@include('partials.icon', ['name' => $ikon, 'class' => 'ic'])</span>
+                    <b>{{ $judul }}</b>
+                    <span class="t">{{ $kalimat }}</span>
                 </a>
-                {{-- Keuangan hanya untuk superadmin: ini bukan data operasional,
-                     melainkan pembanding untuk MENGUJI data operasional. --}}
-                <a href="{{ route('admin.keuangan.index') }}" class="card card-link">
-                    <div class="icon">@include('partials.icon', ['name' => 'chart', 'class' => 'ic-xl'])</div>
-                    <h3>Keuangan Bulanan</h3>
-                    <p>Setoran nyata per bulan, disandingkan dengan pendapatan menurut catatan kamar.</p>
-                </a>
-            @endif
-            <a href="{{ route('admin.invoices.index') }}" class="card card-link">
-                <div class="icon">@include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-xl'])</div>
-                <h3>Invoice</h3>
-                <p>Ringkasan tagihan bulan berjalan: jumlah, nilai, dan yang belum lunas.</p>
-            </a>
-            <a href="{{ route('admin.absensi.index') }}" class="card card-link accent-orange">
-                <div class="icon">@include('partials.icon', ['name' => 'users', 'class' => 'ic-xl'])</div>
-                <h3>Absensi</h3>
-                <p>Kehadiran per shift beserta selfie dan foto kartu kunci di laci.</p>
-            </a>
-            <a href="{{ route('admin.reports.index') }}" class="card card-link">
-                @if ($openReports > 0)
-                    <span class="count">{{ $openReports }} Open</span>
-                @endif
-                <div class="icon">@include('partials.icon', ['name' => 'inbox', 'class' => 'ic-xl'])</div>
-                <h3>Laporan</h3>
-                <p>Baca tiket dari staff, lalu tandai selesai bila sudah ditindaklanjuti.</p>
-            </a>
-        @else
-            <a href="{{ route('staff.stocks.index') }}" class="card card-link">
-                <div class="icon">@include('partials.icon', ['name' => 'box', 'class' => 'ic-xl'])</div>
-                <h3>Stok</h3>
-                <p>Tambah atau kurangi jumlah stok harian — langsung tercatat di panel admin.</p>
-            </a>
-            <a href="{{ route('staff.rooms.index') }}" class="card card-link accent-orange">
-                <div class="icon">@include('partials.icon', ['name' => 'bed', 'class' => 'ic-xl'])</div>
-                <h3>Kamar</h3>
-                <p>Catat booking (bisa beberapa kamar sekaligus) lalu check-in tamu saat tiba.</p>
-            </a>
-            <a href="{{ route('staff.absensi.index') }}" class="card card-link accent-orange">
-                <div class="icon">@include('partials.icon', ['name' => 'clock', 'class' => 'ic-xl'])</div>
-                <h3>Jadwal &amp; Absensi</h3>
-                <p>Susun jadwal shift H-1 dan absen dengan foto saat mulai bertugas.</p>
-            </a>
+            @endforeach
+        </div>
+        <div class="karosel-titik" id="karosel-titik"></div>
+    </section>
+    @endunless
 
-            <a href="{{ route('staff.invoices.index') }}" class="card card-link">
-                <div class="icon">@include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-xl'])</div>
-                <h3>Invoice</h3>
-                <p>Buat dan cetak tagihan tamu lengkap dengan kop hotel.</p>
-            </a>
-            <a href="{{ route('staff.reports.index') }}" class="card card-link">
-                <div class="icon">@include('partials.icon', ['name' => 'inbox', 'class' => 'ic-xl'])</div>
-                <h3>Laporan</h3>
-                <p>Kirim tiket kendala atau kebutuhan ke admin dan pantau statusnya.</p>
-            </a>
-        @endif
-    </div>
-
-    @if (Auth::user()->isAdmin())
-        @include('partials.jadwal-hari-ini', ['vertikal' => true])
+    @if ($admin)
+        <div class="dash-grid">
+            <div>@include('admin.revenue.chart')</div>
+            @include('partials.jadwal-hari-ini', ['vertikal' => true])
+        </div>
     @endif
-    </div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    const akar  = document.getElementById('karosel');
+    const jalur = document.getElementById('karosel-jalur');
+    const titik = document.getElementById('karosel-titik');
+    if (!akar || !jalur) return;
+
+    const slides = Array.from(jalur.children);
+    const langkah = () => slides.length > 1 ? slides[1].offsetLeft - slides[0].offsetLeft : jalur.clientWidth;
+    const tampil  = () => Math.max(1, Math.round(jalur.clientWidth / langkah()));
+    const halaman = () => Math.max(1, slides.length - tampil() + 1);
+    const posisi  = () => Math.round(jalur.scrollLeft / langkah());
+
+    function ke(i) {
+        const n = halaman();
+        i = ((i % n) + n) % n;
+        jalur.scrollTo({ left: i * langkah() });
+    }
+
+    function gambarTitik() {
+        const n = halaman();
+        titik.innerHTML = '';
+        for (let i = 0; i < n; i++) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.setAttribute('aria-label', 'Ke pintasan ' + (i + 1));
+            b.addEventListener('click', () => ke(i));
+            titik.appendChild(b);
+        }
+        tandai();
+    }
+
+    function tandai() {
+        const p = Math.min(posisi(), halaman() - 1);
+        Array.from(titik.children).forEach((b, i) => b.setAttribute('aria-current', i === p ? 'true' : 'false'));
+    }
+
+    akar.querySelectorAll('[data-arah]').forEach(b =>
+        b.addEventListener('click', () => ke(posisi() + parseInt(b.dataset.arah, 10))));
+    jalur.addEventListener('scroll', () => window.requestAnimationFrame(tandai), { passive: true });
+    window.addEventListener('resize', gambarTitik);
+
+    // Bergeser sendiri tiap 5 detik; berhenti selama disentuh/diarahkan kursor
+    // dan bila pengguna meminta gerak dikurangi.
+    const diam = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let jeda = false;
+    ['mouseenter', 'focusin', 'touchstart'].forEach(e => akar.addEventListener(e, () => { jeda = true; }, { passive: true }));
+    ['mouseleave', 'focusout', 'touchend'].forEach(e => akar.addEventListener(e, () => { jeda = false; }, { passive: true }));
+    if (!diam) setInterval(() => { if (!jeda && !document.hidden) ke(posisi() + 1); }, 5000);
+
+    gambarTitik();
+})();
+</script>
+@endpush

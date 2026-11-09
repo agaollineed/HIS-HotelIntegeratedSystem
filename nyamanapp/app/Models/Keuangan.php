@@ -71,10 +71,33 @@ class Keuangan extends Model
         return $this->periode->format('Y-m');
     }
 
+    /** Bonus karyawan: persentase dari keuntungan bulan itu. */
+    public const PERSEN_BONUS = 5;
+
     /** Laba bersih bulan itu. Boleh negatif — bulan rugi memang ada. */
     public function laba(): int
     {
         return $this->pemasukan - $this->pengeluaran;
+    }
+
+    /** Keuntungan = omset − pengeluaran (nama lain laba bersih). */
+    public function keuntungan(): int
+    {
+        return $this->laba();
+    }
+
+    /**
+     * Bonus karyawan: PERSEN_BONUS dari keuntungan, dibulatkan ke rupiah.
+     * Bulan rugi tidak menghasilkan bonus negatif — bonusnya nol.
+     */
+    public function bonusKaryawan(): int
+    {
+        return self::bonusDari($this->keuntungan());
+    }
+
+    public static function bonusDari(int $keuntungan): int
+    {
+        return $keuntungan > 0 ? (int) round($keuntungan * self::PERSEN_BONUS / 100) : 0;
     }
 
     /**

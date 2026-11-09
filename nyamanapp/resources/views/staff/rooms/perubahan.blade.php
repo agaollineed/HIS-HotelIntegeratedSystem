@@ -109,9 +109,9 @@
     <div class="note-grup">
         @include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-sm'])
         <span>
-            Satu pengajuan berisi <b>satu jenis perubahan</b>, dan admin memutuskannya
-            satu per satu. Kalau ada dua hal yang perlu diubah, ajukan bergantian
-            setelah yang pertama diputus.
+            Satu pengajuan = satu jenis perubahan, diputus admin satu per satu.
+            <b>Pindah kamar</b> tidak perlu diajukan —
+            <a href="{{ route('staff.rooms.pindah', $booking) }}">kerjakan langsung di sini</a>.
         </span>
     </div>
 
@@ -141,7 +141,27 @@
         </div>
 
         {{-- Hanya blok milik jenis terpilih yang terlihat dan terkirim. --}}
+        @if (isset($jenisList[\App\Models\BookingRequest::PINDAH_KAMAR]))
         <div class="blok" id="blok-pindah_kamar" hidden>
+            <div class="fld">
+                <label for="pindah_mulai">Pindah Mulai Malam</label>
+                <select id="pindah_mulai" name="pindah_mulai">
+                    @foreach ($tanggalPindah ?? [] as $i => $t)
+                        @php $sisaMalam = (int) $t->diffInDays($booking->check_out->copy()->startOfDay()); @endphp
+                        <option value="{{ $t->toDateString() }}" data-malam="{{ $sisaMalam }}"
+                                @selected(old('pindah_mulai') === $t->toDateString())>
+                            {{ $t->translatedFormat('l, j M Y') }} —
+                            {{ $i === 0 ? 'seluruh masa menginap' : 'malam ke-' . ($i + 1) . ', ' . $sisaMalam . ' malam di kamar baru' }}
+                        </option>
+                    @endforeach
+                </select>
+                <div class="hint">
+                    Contoh: tamu memesan 2 malam di kamar ini tapi ingin pindah mulai malam kedua — pilih tanggal malam kedua.
+                    Malam sebelumnya tetap di kamar {{ $booking->room?->nomor ?? '—' }} dengan tarifnya sendiri,
+                    dan tagihan pesanan menyesuaikan tarif kamar baru.
+                </div>
+            </div>
+
             <div class="fld">
                 <label for="room_id">Kamar Tujuan</label>
                 <select id="room_id" name="room_id">
@@ -149,19 +169,31 @@
                     @foreach ($roomsByTipe as $tipe => $rooms)
                         <optgroup label="{{ ucfirst($tipe) }}">
                             @foreach ($rooms as $room)
+                                @php
+                                    $sekarang = $room->id === $booking->room_id;
+                                    $nama     = array_values((array) (($penghuni ?? collect())->get($room->id, [])));
+                                    $buntu    = count($nama) > 1;
+                                @endphp
                                 <option value="{{ $room->id }}"
+                                        data-nomor="{{ $room->nomor }} ({{ $room->labelTipe() }})"
                                         @selected((int) old('room_id') === $room->id)
-                                        @disabled($room->id === $booking->room_id)>
+                                        @disabled($sekarang || $buntu)>
                                     {{ $room->nomor }} ({{ $room->labelTipe() }})
-                                    {{ $room->id === $booking->room_id ? '— kamar sekarang' : '' }}
+                                    {{ $sekarang ? '— kamar sekarang' : (count($nama) === 1 ? '— terisi: ' . $nama[0] . ' (akan ditukar)' : ($buntu ? '— terisi ' . count($nama) . ' tamu (tidak bisa ditukar)' : '')) }}
                                 </option>
                             @endforeach
                         </optgroup>
                     @endforeach
                 </select>
-                <div class="hint">Ketersediaan diperiksa ulang saat admin menyetujui.</div>
+                <div class="hint" id="hint-pindah">
+                    Pindah seluruh masa menginap: kamar yang terisi satu tamu tetap bisa dipilih, penghuninya otomatis
+                    ditukar ke kamar {{ $booking->room?->nomor ?? '—' }}. Pindah mulai malam tertentu: kamar tujuan harus kosong.
+                    Ketersediaan diperiksa ulang saat admin menyetujui.
+                </div>
             </div>
         </div>
+
+        @endif
 
         <div class="blok" id="blok-perpanjang" hidden>
             <div class="fld">
@@ -233,6 +265,56 @@
 @endsection
 
 @push('scripts')
+<script>
+// Ketersediaan kamar tujuan mengikuti tanggal mulai pindah.
+(function () {
+    const mulai = document.getElementById('pindah_mulai');
+    const kamar = document.getElementById('room_id');
+    if (!mulai || !kamar) return;
+
+    const AVAIL_URL  = @json(route('staff.rooms.available'));
+    const BOOKING_ID = @json($booking->id);
+    const ROOM_ID    = @json($booking->room_id);
+    const AWAL       = @json($booking->check_in->toDateString());
+
+    function muat() {
+        const op = mulai.selectedOptions[0];
+        if (!op) return;
+        const url = new URL(AVAIL_URL, window.location.origin);
+        url.searchParams.set('check_in', mulai.value);
+        url.searchParams.set('durasi', op.dataset.malam || 1);
+        url.searchParams.set('ignore', BOOKING_ID);
+
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(function (data) {
+                const terisi   = new Set((data.occupied || []).map(Number));
+                const penghuni = data.penghuni || {};
+                const penuh    = mulai.value === AWAL;
+
+                kamar.querySelectorAll('option').forEach(function (o) {
+                    if (!o.value || parseInt(o.value, 10) === ROOM_ID) return;
+                    const id   = parseInt(o.value, 10);
+                    const nama = penghuni[id] || [];
+                    const isi  = terisi.has(id);
+                    const tukar = isi && penuh && nama.length === 1;
+                    o.disabled = isi && !tukar;
+                    o.textContent = o.dataset.nomor + (
+                        !isi ? '' :
+                        tukar ? ' — terisi: ' + nama[0] + ' (akan ditukar)' :
+                        ' — terisi' + (nama.length ? ': ' + nama.join(', ') : '')
+                    );
+                });
+                const dipilih = kamar.selectedOptions[0];
+                if (dipilih && dipilih.value && dipilih.disabled) kamar.value = '';
+            })
+            .catch(function () {});
+    }
+
+    mulai.addEventListener('change', muat);
+    muat();
+})();
+</script>
 <script>
     (function () {
         const grid  = document.getElementById('jenis-grid');

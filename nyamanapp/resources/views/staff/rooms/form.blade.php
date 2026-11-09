@@ -10,8 +10,16 @@
     $sumberVal  = (string) old('sumber', $booking->sumber ?? \App\Models\Booking::SUMBER_UMUM);
     $bayarVal   = (string) old('status_bayar', $booking->status_bayar ?? \App\Models\Booking::BAYAR_BELUM);
     $dpVal      = (int) old('dp_nominal', $booking?->dp_nominal ?? 0);
-    $adaBuktiBayar = $isEdit && $booking->foto_bayar_awal !== null;
+    // Bukti dari pintu mana pun (awal, pelunasan saat check-in, atau tambahan)
+    // berarti pesanan ini sudah punya bukti — jangan diminta lagi.
+    $adaBuktiBayar = $isEdit && (bool) ($adaBukti ?? $booking->foto_bayar_awal !== null);
+    $buktiAwalAda  = $isEdit && $booking->foto_bayar_awal !== null;
+    $dibayarLama   = (int) ($dibayarLama ?? 0);
     $occupied   = collect($occupiedIds ?? []);
+    // Nama penghuni per kamar terisi (mode ubah). Satu nama = kamar bisa
+    // dipilih dan penghuninya ditukar ke kamar asal; lebih dari satu = tidak.
+    $penghuni   = collect($penghuni ?? []);
+    $asalNomor  = $booking?->room?->nomor ?? '—';
     // Tanggal boleh dimundurkan: tamu yang datang dini hari memakai kamar
     // untuk malam KEMARIN, dan check-out siang ini.
     $minDate    = now()->subDays(\App\Http\Controllers\Staff\BookingController::MUNDUR_MAKS_HARI)->toDateString();
@@ -20,7 +28,7 @@
     $diskonVal       = (int) old('diskon_nominal', $booking?->diskon_nominal ?? 0);
     $diskonPersenVal = (int) old('diskon_persen', $booking?->diskon_persen ?? 0);
     $diskonModeVal   = (string) old('diskon_mode', $diskonPersenVal > 0 ? 'persen' : 'rupiah');
-    $hargaLain  = (int) ($hargaLain ?? 0);
+    $totalLain  = (int) ($totalLain ?? 0);
 
     // Kamar tercentang (tambah) / kamar terpilih (ubah).
     $checkedIds = $isEdit
@@ -49,6 +57,10 @@
     .fld input[type=date] { color-scheme: dark; }
     .fld select option:disabled { color: var(--muted); }
     .fld .hint { margin-top: 6px; font-size: .78rem; color: var(--muted); }
+    .fld .hint-tukar {
+        color: var(--accent-2); background: var(--accent-2-soft); border: 1px solid var(--border-violet);
+        border-radius: 10px; padding: 9px 12px; line-height: 1.5;
+    }
 
     .grid-2 { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; }
 
@@ -238,11 +250,13 @@
     <div class="fld">
         <label for="check_in">Tanggal Check-in</label>
         <input id="check_in" type="date" name="check_in" value="{{ $checkInVal }}"
-               @unless ($isEdit) min="{{ $minDate }}" @endunless required>
+               @unless ($isEdit) min="{{ $minDate }}" @endunless required
+               @if (! empty($pindahDari)) readonly @endif>
     </div>
     <div class="fld">
         <label for="check_out">Tanggal Check-out</label>
-        <input id="check_out" type="date" name="check_out" value="{{ $checkOutVal }}" required>
+        <input id="check_out" type="date" name="check_out" value="{{ $checkOutVal }}" required
+               @if (! empty($pindahKe)) readonly @endif>
     </div>
 </div>
 
@@ -261,6 +275,20 @@
 
 <div class="co-line">Lama menginap: <b id="malam-preview">{{ $malamAwal }}</b> malam</div>
 
+{{-- Kamar hasil pindah per hari bersambung dengan kamar sebelum/sesudahnya;
+     tanggal di sambungannya dikunci supaya tidak ada malam bolong atau dobel. --}}
+@if (! empty($pindahDari) || ! empty($pindahKe))
+    <div class="fld"><div class="hint hint-tukar">
+        @if (! empty($pindahDari))
+            Kamar ini lanjutan pindah dari kamar {{ $pindahDari->room?->nomor ?? '—' }} — tanggal check-in terkunci.
+        @endif
+        @if (! empty($pindahKe))
+            Tamu pindah dari kamar ini ke kamar {{ $pindahKe->room?->nomor ?? '—' }} mulai
+            {{ $pindahKe->check_in->translatedFormat('j M Y') }} — tanggal check-out terkunci. Perpanjang di kamar lanjutannya.
+        @endif
+    </div></div>
+@endif
+
 <div class="fld">
     <label>{{ $isEdit ? 'Kamar' : 'Pilih Kamar (boleh lebih dari satu)' }}</label>
 
@@ -272,21 +300,28 @@
                 @if ($roomsTipe->isNotEmpty())
                     <optgroup label="{{ $label }}">
                         @foreach ($roomsTipe as $room)
-                            @php $isOcc = $occupied->contains($room->id); @endphp
+                            @php
+                                $isOcc = $occupied->contains($room->id);
+                                $nama  = array_values((array) $penghuni->get($room->id, []));
+                                $tukar = $isOcc && count($nama) === 1;
+                                $buntu = $isOcc && count($nama) > 1;
+                            @endphp
                             <option value="{{ $room->id }}"
                                     data-nomor="{{ $room->nomor }} ({{ $room->labelTipe() }})"
                                     data-harga="{{ $room->hargaPerMalam(true) }}"
                                     data-harga-tanpa-bf="{{ $room->hargaPerMalam(false) }}"
                                     data-bf-wajib="{{ $room->bolehTanpaBreakfast() ? '0' : '1' }}"
                                     @selected(in_array($room->id, $checkedIds, true))
-                                    @disabled($isOcc)>
-                                {{ $room->nomor }} ({{ $room->labelTipe() }}){{ $isOcc ? ' — terisi' : '' }}
+                                    @disabled($buntu)>
+                                {{ $room->nomor }} ({{ $room->labelTipe() }}){{ $tukar ? ' — terisi: ' . $nama[0] . ' (akan ditukar)' : ($buntu ? ' — terisi ' . count($nama) . ' tamu (tidak bisa ditukar)' : ($isOcc ? ' — terisi (akan ditukar)' : '')) }}
                             </option>
                         @endforeach
                     </optgroup>
                 @endif
             @endforeach
         </select>
+        <div class="hint">Kamar yang sedang terisi tetap bisa dipilih: penghuninya otomatis ditukar ke kamar {{ $asalNomor }}.</div>
+        <div class="hint hint-tukar" id="tukar-note" hidden></div>
     @else
         <div class="rooms-box" id="rooms-box">
             @foreach ($tipeLabels as $tipe => $label)
@@ -467,19 +502,45 @@
         @if ($adaBuktiBayar)
             <div class="bukti-ada">
                 @include('partials.icon', ['name' => 'check', 'class' => 'ic-xs'])
-                Bukti pembayaran sudah tersimpan. Unggah lagi hanya bila ingin menggantinya.
+                Bukti pembayaran sudah tersimpan{{ $buktiAwalAda ? '' : ' (bukti pelunasan / pembayaran sebelumnya)' }}.
+                @if (! empty($buktiUrl))
+                    <a href="{{ $buktiUrl }}" data-lightbox="{{ $buktiUrl }}">Lihat</a>.
+                @endif
+                Tidak perlu unggah lagi, kecuali uang yang diterima bertambah.
             </div>
         @endif
 
         @include('partials.foto-uploader', [
             'name'    => 'foto_bayar_awal',
-            'fotoUrl' => $adaBuktiBayar ? route('bayar.awal', $booking) : null,
+            'fotoUrl' => $buktiAwalAda ? route('bayar.awal', $booking) : null,
             'ikon'    => 'clipboard',
             'judul'   => 'Bukti pembayaran',
             'pesan'   => 'Belum ada bukti pembayaran.',
             'hint'    => $adaBuktiBayar ? 'Opsional — hanya bila ingin mengganti.' : 'Wajib.',
         ])
     </div>
+
+    {{-- ---------- Bukti pembayaran SELISIH ----------
+         Hanya pada formulir ubah, dan hanya bila uang yang diakui sudah
+         diterima BERTAMBAH dibanding sebelumnya — misalnya kamar di-upgrade
+         atau malamnya ditambah tetapi pesanan tetap ditandai lunas. Pindah ke
+         kamar setarif tidak memunculkan kotak ini. --}}
+    @if ($isEdit)
+        <div class="bukti-box" id="bukti-tambah-box" hidden>
+            <div class="bukti-ket">
+                @include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-lg'])
+                <span id="bukti-tambah-pesan">Unggah bukti pembayaran selisih.</span>
+            </div>
+            @include('partials.foto-uploader', [
+                'name'    => 'foto_bayar_tambahan',
+                'fotoUrl' => null,
+                'ikon'    => 'clipboard',
+                'judul'   => 'Bukti pembayaran selisih',
+                'pesan'   => 'Belum ada bukti pembayaran selisih.',
+                'hint'    => 'Wajib bila selisihnya sudah dibayar.',
+            ])
+        </div>
+    @endif
 </div>
 
 <div class="fld">
@@ -509,6 +570,35 @@
         const IGNORE_ID = @json($booking?->id);
 
         let lastOccupied = new Set(@json($occupied->values()).map(Number));
+        let lastPenghuni = @json((object) $penghuni->all());   // room_id => [nama, ...]
+
+        // ---------- Catatan tukar kamar (mode ubah) ----------
+        // Memilih kamar terisi berarti penghuninya digeser ke kamar asal.
+        // Itu dikatakan terang-terangan di bawah pilihan, sebelum disimpan.
+        const tukarNote  = document.getElementById('tukar-note');
+        const ASAL_NOMOR = @json($asalNomor);
+
+        function catatanTukar() {
+            if (!tukarNote || !roomSel) return;
+            const op   = roomSel.selectedOptions[0];
+            const id   = op && op.value ? parseInt(op.value, 10) : NaN;
+            const nama = lastPenghuni[id] || [];
+
+            if (!op || !op.value || !lastOccupied.has(id) || nama.length > 1) {
+                tukarNote.hidden = true;
+                return;
+            }
+
+            const nomor = (op.dataset.nomor || '').split(' ')[0];
+            const siapa = nama[0] || 'tamu lain';
+            tukarNote.textContent = 'Kamar ' + nomor + ' sedang ditempati ' + siapa
+                + '. Setelah disimpan, ' + siapa + ' otomatis dipindah ke kamar ' + ASAL_NOMOR
+                + ' (tukar kamar).';
+            tukarNote.hidden = false;
+        }
+
+        if (roomSel) roomSel.addEventListener('change', catatanTukar);
+        catatanTukar();
 
         // Durasi tidak lagi diketik: dihitung dari jarak dua tanggal.
         function nilaiDurasi() {
@@ -557,15 +647,26 @@
             }
 
             if (roomSel) {
+                // Kamar terisi satu tamu tetap bisa dipilih (tukar kamar);
+                // yang ditempati dua tamu atau lebih dikunci.
                 roomSel.querySelectorAll('option').forEach(function (op) {
                     if (!op.value) return;
-                    const terisi = lastOccupied.has(parseInt(op.value, 10));
-                    op.disabled = terisi;
-                    op.textContent = op.dataset.nomor + (terisi ? ' — terisi' : '');
+                    const id     = parseInt(op.value, 10);
+                    const terisi = lastOccupied.has(id);
+                    const nama   = lastPenghuni[id] || [];
+                    const buntu  = terisi && nama.length > 1;
+                    op.disabled = buntu;
+                    op.textContent = op.dataset.nomor + (
+                        !terisi ? '' :
+                        buntu   ? ' — terisi ' + nama.length + ' tamu (tidak bisa ditukar)' :
+                                  ' — terisi: ' + (nama[0] || 'tamu lain') + ' (akan ditukar)'
+                    );
                 });
-                if (roomSel.value && lastOccupied.has(parseInt(roomSel.value, 10))) {
+                const dipilih = roomSel.selectedOptions[0];
+                if (dipilih && dipilih.value && dipilih.disabled) {
                     roomSel.value = '';
                 }
+                catatanTukar();
             }
         }
 
@@ -587,6 +688,7 @@
                     .then(r => r.ok ? r.json() : Promise.reject())
                     .then(data => {
                         lastOccupied = new Set((data.occupied || []).map(Number));
+                        lastPenghuni = data.penghuni || {};
                         syncRooms();
                     })
                     .catch(() => {}); // validasi server tetap penjaga terakhir
@@ -695,7 +797,7 @@
         // Tagihan dihitung ulang setiap kali kamar, tanggal, satuan, atau
         // nominal berubah. Server tetap menghitung sendiri saat menyimpan; ini
         // supaya staff melihat angka yang akan ditagih SEBELUM menekan simpan.
-        const HARGA_LAIN   = @json($hargaLain);
+        const TOTAL_LAIN   = @json($totalLain);
         const diskonTampil = document.getElementById('diskon_tampil');
         const diskonInput  = document.getElementById('diskon_nominal');
         const dskModeBox   = document.getElementById('dsk-mode');
@@ -756,7 +858,6 @@
             if (roomSel) {
                 const op = roomSel.selectedOptions[0];
                 if (op && op.value) total += tarifKamar(op);
-                total += HARGA_LAIN;   // kamar lain segrup, tidak tampil di form ini
             }
 
             return total;
@@ -779,7 +880,9 @@
         }
 
         function hitungDiskon() {
-            const total = hargaPerMalam() * nilaiDurasi();
+            // Kamar lain segrup ditambahkan dengan totalnya sendiri — malam dan
+            // sarapannya bisa berbeda dari kamar yang sedang diubah.
+            const total = hargaPerMalam() * nilaiDurasi() + TOTAL_LAIN;
             const tiket = dariTiketSekarang();
 
             if (roomsTotalEl) roomsTotalEl.textContent = rupiah(total);
@@ -839,6 +942,13 @@
         const buktiPesan = document.getElementById('bukti-pesan');
         const buktiInput = buktiBox ? buktiBox.querySelector('input[type="file"]') : null;
 
+        const IS_EDIT      = @json($isEdit);
+        const ADA_BUKTI    = @json($adaBuktiBayar);
+        const DIBAYAR_LAMA = @json($dibayarLama);
+        const tambahBox    = document.getElementById('bukti-tambah-box');
+        const tambahPesan  = document.getElementById('bukti-tambah-pesan');
+        const tambahInput  = tambahBox ? tambahBox.querySelector('input[type="file"]') : null;
+
         function statusBayarTerpilih() {
             const dipilih = document.querySelector('#bayar-grup input[name="status_bayar"]:checked');
             return dipilih ? dipilih.value : 'belum';
@@ -885,7 +995,26 @@
         function terapkanBukti(status, tiket, tagihan, dp) {
             if (!buktiBox) return;
 
-            const perlu = !tiket && (status === 'lunas' || status === 'dp');
+            // Uang yang diakui sudah diterima, sesudah perubahan ini.
+            const dibayarBaru = (tiket || status === 'lunas') ? tagihan
+                : (status === 'dp' ? Math.min(dp, tagihan) : 0);
+            const perluTambah = IS_EDIT && dibayarBaru > DIBAYAR_LAMA && (ADA_BUKTI || tiket);
+
+            if (tambahBox) {
+                tambahBox.hidden = !perluTambah;
+                if (!perluTambah && tambahInput) tambahInput.value = '';
+                if (perluTambah && tambahPesan) {
+                    const naik = rupiah(dibayarBaru - DIBAYAR_LAMA);
+                    tambahPesan.textContent = tiket
+                        ? 'Tagihan naik ' + naik + ' dari yang dibayar lewat Tiket.com. Selisihnya dibayar di hotel — unggah bukti pembayarannya.'
+                        : 'Uang yang diterima naik ' + naik + ' (upgrade kamar atau tambah malam). Unggah bukti pembayaran selisihnya, atau pilih "DP" bila tamu belum membayarnya.';
+                }
+            }
+
+            // Bukti awal: hanya bila pesanan ini belum punya bukti apa pun.
+            // Kalau sudah punya, kotak ini tetap ada untuk mengganti fotonya —
+            // kecuali saat yang dibutuhkan justru bukti selisih.
+            const perlu = !tiket && (status === 'lunas' || status === 'dp') && !(ADA_BUKTI && perluTambah);
             buktiBox.hidden = !perlu;
 
             // Berkas yang terlanjur dipilih ikut dibuang saat kotaknya

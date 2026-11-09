@@ -1,1 +1,12 @@
 Require all granted
+
+# Folder aplikasi ini juga terjangkau lewat domain lain
+# (djimatosuperapp.site/nyamanapp/...). Dari jalur itu hanya folder public
+# yang boleh dibuka; kode, log, dan berkas lain ditolak (403).
+# nyamanapp.site tidak terpengaruh: domain itu langsung menuju folder public,
+# yang memakai .htaccess-nya sendiri.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^public(/|$) - [L]
+    RewriteRule ^ - [F]
+</IfModule>

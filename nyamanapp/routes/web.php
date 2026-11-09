@@ -7,9 +7,13 @@ use App\Http\Controllers\Admin\PurgeController;
 use App\Http\Controllers\Admin\TamuController;
 use App\Http\Controllers\Admin\InvoiceController as AdminInvoiceController;
 use App\Http\Controllers\Admin\KeuanganController;
+use App\Http\Controllers\Admin\SaldoController;
+use App\Http\Controllers\Admin\PajakController;
+use App\Http\Controllers\Admin\BukuBesarController;
 use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Admin\RevenueController;
 use App\Http\Controllers\Admin\PerubahanController as AdminPerubahanController;
+use App\Http\Controllers\Admin\PindahKamarController as AdminPindahKamarController;
 use App\Http\Controllers\Admin\RoomController as AdminRoomController;
 use App\Http\Controllers\Admin\StockController as AdminStockController;
 use App\Http\Controllers\Admin\StockLogController;
@@ -27,8 +31,9 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Landing page
+| Halaman pembuka
 |--------------------------------------------------------------------------
+| Bukan landing page: logo Nyaman sebentar lalu langsung ke halaman login.
 | Kalau sudah login, langsung diarahkan ke dashboard.
 */
 Route::get('/', function () {
@@ -51,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/bayar/{booking}', [KtpController::class, 'pelunasan'])->name('bayar.show');
     Route::get('/bayar-awal/{booking}', [KtpController::class, 'bayarAwal'])->name('bayar.awal');
     Route::get('/bayar-late/{booking}', [KtpController::class, 'pembayaranLate'])->name('bayar.late');
+    Route::get('/bayar-tambahan/{booking}', [KtpController::class, 'bayarTambahan'])->name('bayar.tambahan');
     Route::get('/kerusakan/{booking}', [KtpController::class, 'kerusakan'])->name('kerusakan.show');
     Route::get('/laporan/{report}/foto', [KtpController::class, 'laporan'])->name('laporan.foto');
     Route::get('/absensi/{absensi}/foto', [KtpController::class, 'absensi'])->name('absensi.foto');
@@ -99,6 +105,11 @@ Route::middleware('auth')->group(function () {
             Route::post('perubahan/{permintaan}/setujui', [AdminPerubahanController::class, 'setujui'])->name('perubahan.setujui');
             Route::post('perubahan/{permintaan}/tolak', [AdminPerubahanController::class, 'tolak'])->name('perubahan.tolak');
 
+            // Pindah kamar per hari: seluruh masa menginap, atau mulai malam
+            // tertentu (baris dipecah, tetap satu pesanan & satu tagihan).
+            Route::get('rooms/{booking}/pindah', [AdminPindahKamarController::class, 'create'])->name('rooms.pindah');
+            Route::post('rooms/{booking}/pindah', [AdminPindahKamarController::class, 'store'])->name('rooms.pindah.store');
+
             Route::get('rooms/{booking}/edit', [AdminBookingController::class, 'edit'])->name('rooms.edit');
             Route::put('rooms/{booking}', [AdminBookingController::class, 'update'])->name('rooms.update');
             // Menghapus booking = menghapus jejak. Admin mengawasi staff,
@@ -144,17 +155,37 @@ Route::middleware('auth')->group(function () {
                 Route::post('akun/{user}/role', [AkunController::class, 'role'])->name('akun.role');
             });
 
-            // ---------- Keuangan: pemasukan & pengeluaran nyata ----------
-            // Angka setoran yang benar-benar diterima pemilik, dicatat manual
-            // per bulan. Hanya superadmin — ini bukan data operasional, ini
-            // pembanding untuk MENGUJI data operasional.
-            Route::middleware('role:superadmin')->group(function () {
-                Route::get('keuangan', [KeuanganController::class, 'index'])->name('keuangan.index');
-                Route::post('keuangan', [KeuanganController::class, 'store'])->name('keuangan.store');
-                Route::delete('keuangan/{keuangan}', [KeuanganController::class, 'destroy'])->name('keuangan.destroy');
-                Route::get('keuangan/data', [KeuanganController::class, 'data'])->name('keuangan.data');
-                Route::get('keuangan/export', [KeuanganController::class, 'export'])->name('keuangan.export');
-            });
+            // ---------- Keuangan: saldo rekening harian & keuntungan bulanan ----------
+            // Admin dan superadmin mengisi dan melihat. Menghapus catatan hanya
+            // superadmin (dijaga di controller lewat bolehHapusKeuangan()).
+            Route::get('keuangan/saldo', [SaldoController::class, 'index'])->name('keuangan.saldo');
+            Route::post('keuangan/saldo', [SaldoController::class, 'store'])->name('keuangan.saldo.store');
+            Route::get('keuangan/saldo/data', [SaldoController::class, 'data'])->name('keuangan.saldo.data');
+            Route::get('keuangan/saldo/export', [SaldoController::class, 'exportCsv'])->name('keuangan.saldo.export');
+            Route::post('keuangan/saldo/import', [SaldoController::class, 'importCsv'])->name('keuangan.saldo.import');
+            Route::delete('keuangan/saldo/{saldo}', [SaldoController::class, 'destroy'])->name('keuangan.saldo.destroy');
+
+            Route::get('keuangan/pajak', [PajakController::class, 'index'])->name('keuangan.pajak');
+            Route::post('keuangan/pajak', [PajakController::class, 'store'])->name('keuangan.pajak.store');
+            Route::get('keuangan/pajak/export', [PajakController::class, 'exportCsv'])->name('keuangan.pajak.export');
+            Route::post('keuangan/pajak/import', [PajakController::class, 'importCsv'])->name('keuangan.pajak.import');
+            Route::post('keuangan/pajak/{pajak}/bayar', [PajakController::class, 'bayar'])->name('keuangan.pajak.bayar');
+            Route::delete('keuangan/pajak/{pajak}', [PajakController::class, 'destroy'])->name('keuangan.pajak.destroy');
+
+            Route::get('keuangan/buku-besar', [BukuBesarController::class, 'index'])->name('keuangan.buku-besar');
+            Route::post('keuangan/buku-besar', [BukuBesarController::class, 'store'])->name('keuangan.buku-besar.store');
+            Route::post('keuangan/buku-besar/saldo-awal', [BukuBesarController::class, 'simpanAwal'])->name('keuangan.buku-besar.awal');
+            Route::get('keuangan/buku-besar/export', [BukuBesarController::class, 'exportCsv'])->name('keuangan.buku-besar.export');
+            Route::post('keuangan/buku-besar/import', [BukuBesarController::class, 'importCsv'])->name('keuangan.buku-besar.import');
+            Route::delete('keuangan/buku-besar/{buku}', [BukuBesarController::class, 'destroy'])->name('keuangan.buku-besar.destroy');
+
+            Route::get('keuangan', [KeuanganController::class, 'index'])->name('keuangan.index');
+            Route::post('keuangan', [KeuanganController::class, 'store'])->name('keuangan.store');
+            Route::get('keuangan/data', [KeuanganController::class, 'data'])->name('keuangan.data');
+            Route::get('keuangan/export', [KeuanganController::class, 'export'])->name('keuangan.export');
+            Route::get('keuangan/export-csv', [KeuanganController::class, 'exportCsv'])->name('keuangan.export.csv');
+            Route::post('keuangan/import', [KeuanganController::class, 'importCsv'])->name('keuangan.import');
+            Route::delete('keuangan/{keuangan}', [KeuanganController::class, 'destroy'])->name('keuangan.destroy');
 
             // Riwayat tamu (profil per nomor telepon)
             Route::get('tamu', [TamuController::class, 'index'])->name('tamu.index');
@@ -205,6 +236,10 @@ Route::middleware('auth')->group(function () {
                 ->name('rooms.day');
             // Staff mengajukan perubahan; yang memutuskan admin. Admin tidak
             // memakai rute ini — ia sudah punya formulir ubah langsung.
+            // Pindah kamar kini LANGSUNG, tanpa persetujuan admin — halaman dan
+            // aturannya sama dengan milik admin. Hapus booking tetap superadmin.
+            Route::get('rooms/{booking}/pindah', [AdminPindahKamarController::class, 'create'])->name('rooms.pindah');
+            Route::post('rooms/{booking}/pindah', [AdminPindahKamarController::class, 'store'])->name('rooms.pindah.store');
             Route::get('rooms/{booking}/perubahan', [StaffPerubahanController::class, 'create'])->name('rooms.perubahan');
             Route::post('rooms/{booking}/perubahan', [StaffPerubahanController::class, 'store'])->name('rooms.perubahan.store');
 

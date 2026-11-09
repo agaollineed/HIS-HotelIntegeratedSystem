@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Jadwal;
 use App\Models\Karyawan;
 use App\Models\Report;
+use App\Support\AlarmCheckout;
 use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
@@ -19,11 +20,15 @@ class DashboardController extends Controller
         $user = Auth::user();
 
         if (! $user->isAdmin()) {
-            return view('dashboard', ['openReports' => 0] + $this->jadwalHariIni());
+            return view('dashboard', [
+                'openReports' => 0,
+                'alarm'       => AlarmCheckout::kumpulkan(),
+            ] + $this->jadwalHariIni());
         }
 
         return view('dashboard', [
             'openReports' => Report::where('status', 'open')->count(),
+            'alarm'       => AlarmCheckout::kumpulkan(),
         ] + $this->jadwalHariIni());
     }
 

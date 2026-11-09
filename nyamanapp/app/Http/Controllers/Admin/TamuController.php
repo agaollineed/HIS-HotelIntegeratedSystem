@@ -120,15 +120,28 @@ class TamuController extends Controller
             'ringkas' => [
                 'kunjungan' => $stays->count(),
                 'kamar'     => $bookings->count(),
-                // Malam diambil dari durasi TERPANJANG tiap kunjungan. Sejak
-                // masa menginap bisa berbeda antar kamar dalam satu pesanan,
-                // itulah yang paling masuk akal sebagai "lama tamu menginap".
-                'malam'     => (int) $stays->sum(fn ($grup) => (int) $grup->max('durasi')),
+                // Malam = rentang kunjungan, dari check-in pertama sampai
+                // check-out terakhir. Durasi terpanjang satu kamar tidak cukup
+                // sejak tamu bisa pindah kamar per hari: 1 malam di 202 lalu
+                // 1 malam di 203 tetap 2 malam menginap.
+                'malam'     => (int) $stays->sum(fn ($grup) => self::rentangMalam($grup)),
             ],
         ]);
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Lama satu kunjungan dalam malam: check-in pertama sampai check-out
+     * terakhir di antara kamar-kamarnya.
+     */
+    private static function rentangMalam(Collection $grup): int
+    {
+        $awal  = $grup->min(fn ($b) => $b->check_in?->copy()->startOfDay());
+        $akhir = $grup->max(fn ($b) => $b->check_out?->copy()->startOfDay());
+
+        return ($awal && $akhir) ? max(1, (int) $awal->diffInDays($akhir)) : (int) $grup->max('durasi');
+    }
 
     /**
      * Kunci penyamaan nama: huruf kecil, tanpa gelar/sapaan di depan,
@@ -179,7 +192,7 @@ class TamuController extends Controller
             }))
             ->orderByDesc('check_in')
             ->limit(3000)
-            ->get(['id', 'grup', 'nama_tamu', 'telepon', 'durasi', 'check_in'])
+            ->get(['id', 'grup', 'nama_tamu', 'telepon', 'durasi', 'check_in', 'check_out'])
             ->groupBy(fn (Booking $b) => $b->grup ?? ('single-' . $b->id))
             ->map(function (Collection $grup) {
                 $utama = $grup->sortByDesc('check_in')->first();
@@ -189,7 +202,7 @@ class TamuController extends Controller
                     'nama'     => (string) $utama->nama_tamu,
                     'telepon'  => (string) $utama->telepon,
                     'kamar'    => $grup->count(),
-                    'malam'    => (int) $grup->max('durasi'),
+                    'malam'    => self::rentangMalam($grup),
                     'check_in' => $utama->check_in->toDateString(),
                 ];
             })

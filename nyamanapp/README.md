@@ -8,14 +8,16 @@ Dibangun dengan **Laravel 12**, **PHP 8.2+**, **SQLite**, dan Blade murni (CSS h
 
 ```bash
 composer install
+cp .env.example .env
+php artisan key:generate
+touch database/database.sqlite
 php artisan migrate --seed
-php artisan storage:link
 php artisan serve
 ```
 
 Lalu buka **http://localhost:8000**.
 
-> File `.env` sudah disertakan lengkap dengan `APP_KEY`, dan `database/database.sqlite` sudah dibuat kosong — jadi keempat perintah di atas cukup. Kalau ingin mulai dari nol: salin `.env.example` menjadi `.env` lalu jalankan `php artisan key:generate`.
+> File `.env`, folder `vendor/`, database, log, dan semua foto unggahan (KTP, bukti bayar, absensi) **sengaja tidak ikut di repo** — lihat `.gitignore`. Setiap komputer/server memakai `.env`-nya sendiri.
 >
 > `php artisan storage:link` **tidak diperlukan** — foto KTP sengaja disimpan di penyimpanan privat, bukan folder publik (lihat *Keamanan Foto KTP* di bawah).
 

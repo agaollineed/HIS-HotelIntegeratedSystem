@@ -112,6 +112,18 @@ class User extends Authenticatable
     }
 
     /**
+     * Menghapus catatan keuangan (saldo harian maupun omset bulanan).
+     *
+     * Admin ikut mengisi dan mengoreksi angka — mengisi ulang tanggal atau
+     * bulan yang sama sudah menimpa angkanya — tetapi menghapus jejaknya
+     * tetap wewenang pemilik.
+     */
+    public function bolehHapusKeuangan(): bool
+    {
+        return $this->isSuperadmin();
+    }
+
+    /**
      * Menghapus data per bulan (booking, absensi, laporan, invoice, log stok).
      *
      * Ikut superadmin karena purge booking pada dasarnya adalah hapus booking

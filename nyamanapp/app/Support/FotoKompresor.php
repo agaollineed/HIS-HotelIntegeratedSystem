@@ -31,6 +31,24 @@ class FotoKompresor
      * Kembalikan biner JPEG hasil pemampatan, atau null bila tidak bisa
      * diproses (pemanggil harus memakai berkas asli sebagai cadangan).
      */
+    /**
+     * Kompres lalu simpan ke disk PRIVAT, kembalikan path-nya.
+     * Bila kompresi gagal (format tak dikenal), berkas asli yang disimpan.
+     */
+    public static function simpan(UploadedFile $file, string $folder): string
+    {
+        $biner = self::kompres($file);
+
+        if ($biner === null) {
+            return $file->store($folder, 'local');
+        }
+
+        $path = $folder . '/' . \Illuminate\Support\Str::random(40) . '.jpg';
+        \Illuminate\Support\Facades\Storage::disk('local')->put($path, $biner);
+
+        return $path;
+    }
+
     public static function kompres(UploadedFile $file): ?string
     {
         if (! extension_loaded('gd')) {

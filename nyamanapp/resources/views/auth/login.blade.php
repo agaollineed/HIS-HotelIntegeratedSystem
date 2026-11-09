@@ -9,6 +9,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Masuk — NyamanSuperApp</title>
+    @include('partials.favicon')
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -84,16 +85,42 @@
             transition: background .2s;
         }
         .btn:hover { background: var(--grad-rev); }
-        .back { display: block; text-align: center; margin-top: 18px; color: var(--muted); text-decoration: none; font-size: .86rem; }
-        .back:hover { color: var(--accent); }
+
+        /* Latar idle: cahaya ungu yang melayang pelan, sama dengan panel. */
+        .latar { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+        .latar span { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .32; will-change: transform; }
+        .latar .a { width: 480px; height: 480px; right: -160px; top: -170px; background: #7c3aed; animation: melayang-a 26s ease-in-out infinite alternate; }
+        .latar .b { width: 420px; height: 420px; left: -170px; bottom: -160px; background: #6d28d9; animation: melayang-b 30s ease-in-out infinite alternate; }
+        .latar .c { width: 260px; height: 260px; left: 45%; top: 40%; background: #a78bfa; opacity: .12; animation: melayang-c 34s ease-in-out infinite alternate; }
+        @keyframes melayang-a { to { transform: translate(-110px, 90px) scale(1.08); } }
+        @keyframes melayang-b { to { transform: translate(90px, -80px) scale(1.1); } }
+        @keyframes melayang-c { to { transform: translate(-80px, -60px) scale(1.15); } }
+
+        /* Kartu masuk perlahan setelah halaman pembuka. */
+        .card { animation: masuk .55s cubic-bezier(.2,.8,.3,1) both; }
+        @keyframes masuk { from { transform: translateY(16px) scale(.98); } to { transform: none; } }
+
+        /* Tangan melambai — sama dengan sapaan di Beranda. */
+        .lambai { display: inline-block; transform-origin: 70% 80%; animation: lambai 3.2s ease-in-out infinite; }
+        @keyframes lambai {
+            0%, 60%, 100% { transform: rotate(0); }
+            65% { transform: rotate(16deg); } 70% { transform: rotate(-8deg); }
+            75% { transform: rotate(14deg); } 80% { transform: rotate(-4deg); } 85% { transform: rotate(10deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .latar span, .card, .lambai { animation: none; }
+        }
     </style>
 </head>
 <body>
+    <div class="latar" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span></div>
+
     <div class="card">
         <div class="brand"><span class="dot"></span> Nyaman<span class="sub">Super</span><span class="sub2">App</span></div>
 
-        <h1>Masuk{{ $peran ? ' sebagai ' . $peran : '' }}</h1>
-        <p class="lead">Masukkan email dan kata sandi Anda untuk melanjutkan.</p>
+        <h1>Selamat datang <span class="lambai" aria-hidden="true">👋🏻</span></h1>
+        <p class="lead">Masuk{{ $peran ? ' sebagai ' . $peran : '' }} dengan email dan kata sandi Anda.</p>
 
         @if ($errors->any())
             <div class="err">{{ $errors->first() }}</div>
@@ -120,8 +147,6 @@
 
             <button type="submit" class="btn">Masuk</button>
         </form>
-
-        <a href="{{ route('welcome') }}" class="back">@include('partials.icon', ['name' => 'arrow-left', 'class' => 'ic-xs']) Kembali ke beranda</a>
     </div>
 </body>
 </html>
