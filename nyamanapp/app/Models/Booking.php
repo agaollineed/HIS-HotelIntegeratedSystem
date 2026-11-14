@@ -82,7 +82,7 @@ class Booking extends Model
     public const JAM_CHECKOUT_AWAL = '09:00';
     public const JAM_CHECKOUT      = '12:00';
 
-    /** Asal pesanan. Tiket.com selalu terbayar di muka. */
+    /** Asal pesanan. Tiket.com selalu terbayar di muka; buktinya e-tiket. */
     /* ---------------- Aturan harga ---------------- */
 
     /** Check-in sebelum jam ini dikenai biaya tambahan 1 malam penuh. */
@@ -267,6 +267,9 @@ class Booking extends Model
 
     public const SUMBER_UMUM  = 'umum';
     public const SUMBER_TIKET = 'tiket';
+
+    /** Telepon tamu Tiket.com yang datang tanpa nomor. */
+    public const TANPA_TELEPON = '-';
 
     /**
      * Status pembayaran.
@@ -536,14 +539,15 @@ class Booking extends Model
      * mana-mana. "Belum lunas" tidak menuntut apa-apa karena memang belum ada
      * yang perlu dibuktikan.
      *
-     * Pesanan Tiket.com dikecualikan: uangnya masuk lewat mitra, statusnya
-     * dipaksa lunas oleh server, dan tidak ada transaksi di meja depan yang
-     * bisa difoto.
+     * Pesanan Tiket.com juga wajib membawa bukti, tetapi buktinya E-TIKET:
+     * uangnya masuk lewat mitra dan statusnya dipaksa lunas oleh server, jadi
+     * satu-satunya sandaran "lunas" itu adalah e-tiket dari Tiket.com. Fotonya
+     * disimpan di kolom yang sama (foto_bayar_awal).
      */
     public static function butuhBuktiBayarAwal(?string $statusBayar, ?string $sumber): bool
     {
         if ($sumber === self::SUMBER_TIKET) {
-            return false;
+            return true;
         }
 
         return in_array($statusBayar, [self::BAYAR_LUNAS, self::BAYAR_DP], true);
@@ -561,9 +565,38 @@ class Booking extends Model
      */
     public static function adaBuktiBayarDi($anggota): bool
     {
-        return collect($anggota)->contains(fn (self $b) => $b->foto_bayar_awal !== null
+        // Foto awal pesanan Tiket.com adalah e-tiket, bukan uang yang diterima
+        // di meja depan — tidak dihitung sebagai bukti bayar hotel.
+        return collect($anggota)->contains(fn (self $b) => ($b->foto_bayar_awal !== null && ! $b->dariTiket())
             || $b->foto_pelunasan !== null
             || $b->foto_bayar_tambahan !== null);
+    }
+
+    /**
+     * E-tiket Tiket.com sudah tersimpan di pesanan ini.
+     *
+     * @param  iterable<int, self>  $anggota
+     */
+    public static function adaEtiketDi($anggota): bool
+    {
+        return collect($anggota)->contains(fn (self $b) => $b->dariTiket() && $b->foto_bayar_awal !== null);
+    }
+
+    /**
+     * Bukti awal yang diwajibkan untuk pesanan ini sudah ada: e-tiket untuk
+     * Tiket.com, bukti bayar dari pintu mana pun untuk pesanan umum.
+     *
+     * @param  iterable<int, self>  $anggota
+     */
+    public static function buktiAwalLengkapDi($anggota, ?string $sumber): bool
+    {
+        return $sumber === self::SUMBER_TIKET ? self::adaEtiketDi($anggota) : self::adaBuktiBayarDi($anggota);
+    }
+
+    /** Nama bukti awal untuk tampilan: e-tiket atau bukti bayar. */
+    public function labelBuktiAwal(): string
+    {
+        return $this->dariTiket() ? 'E-tiket Tiket.com' : 'Bukti bayar saat pesanan dibuat';
     }
 
     /**
@@ -584,6 +617,39 @@ class Booking extends Model
     public function wajibBuktiBayarAwal(): bool
     {
         return self::butuhBuktiBayarAwal($this->status_bayar, $this->sumber);
+    }
+
+    /**
+     * Nomor untuk wa.me: angka saja, awalan 0 diganti 62. Null bila tamu
+     * tidak meninggalkan nomor ("-") atau nomornya terlalu pendek.
+     */
+    public static function nomorWa(?string $telepon): ?string
+    {
+        $d = preg_replace('/\D/', '', (string) $telepon);
+        if (strlen($d) < 9) {
+            return null;
+        }
+        if (str_starts_with($d, '0')) {
+            $d = '62' . substr($d, 1);
+        } elseif (str_starts_with($d, '8')) {
+            $d = '62' . $d;
+        }
+
+        return $d;
+    }
+
+    /** Tautan chat WhatsApp ke tamu, atau null bila tidak ada nomor. */
+    public function linkWa(): ?string
+    {
+        $n = self::nomorWa($this->telepon);
+
+        return $n ? 'https://wa.me/' . $n : null;
+    }
+
+    /** Teks nomor untuk tampilan. */
+    public function labelTelepon(): string
+    {
+        return self::nomorWa($this->telepon) ? $this->telepon : 'Tanpa nomor';
     }
 
     public function dariTiket(): bool

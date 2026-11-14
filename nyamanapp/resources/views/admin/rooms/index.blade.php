@@ -4,6 +4,8 @@
 
 @push('head')
 <style>
+    a.wa-link { color: var(--ok); font-weight: 700; text-decoration: none; }
+    a.wa-link:hover { text-decoration: underline; }
     /* ---------- Kalender ---------- */
     .cal-card { padding: 18px; margin-bottom: 26px; }
     .cal-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }

@@ -4,6 +4,8 @@
 
 @push('head')
 <style>
+    a.wa-link { color: var(--ok); font-weight: 700; text-decoration: none; }
+    a.wa-link:hover { text-decoration: underline; }
     .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
     /* ---------- Kalender bulanan ---------- */

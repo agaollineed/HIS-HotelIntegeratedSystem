@@ -14,6 +14,8 @@
     // berarti pesanan ini sudah punya bukti — jangan diminta lagi.
     $adaBuktiBayar = $isEdit && (bool) ($adaBukti ?? $booking->foto_bayar_awal !== null);
     $buktiAwalAda  = $isEdit && $booking->foto_bayar_awal !== null;
+    // Tiket.com: buktinya e-tiket (disimpan di kolom foto_bayar_awal).
+    $adaEtiket     = $isEdit && (bool) ($adaEtiket ?? ($booking->dariTiket() && $booking->foto_bayar_awal !== null));
     $dibayarLama   = (int) ($dibayarLama ?? 0);
     $occupied   = collect($occupiedIds ?? []);
     // Nama penghuni per kamar terisi (mode ubah). Satu nama = kamar bisa
@@ -57,6 +59,9 @@
     .fld input[type=date] { color-scheme: dark; }
     .fld select option:disabled { color: var(--muted); }
     .fld .hint { margin-top: 6px; font-size: .78rem; color: var(--muted); }
+    .fld label.wa-tanpa { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .82rem; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; color: var(--text, inherit); }
+    .fld label.wa-tanpa[hidden] { display: none; }
+    .wa-tanpa input { width: 16px; height: 16px; accent-color: var(--accent); }
     .fld .hint-tukar {
         color: var(--accent-2); background: var(--accent-2-soft); border: 1px solid var(--border-violet);
         border-radius: 10px; padding: 9px 12px; line-height: 1.5;
@@ -200,7 +205,7 @@
 
     /* ---------- Bukti pembayaran saat pesanan dibuat ---------- */
     .bukti-box { margin-top: 16px; }
-    .bukti-box[hidden] { display: none; }
+    .bukti-box[hidden], .bukti-ada[hidden] { display: none; }
     .bukti-ket {
         display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px;
         background: var(--warn-soft); border: 1px solid var(--warn-line);
@@ -244,6 +249,19 @@
     <input id="nama_tamu" type="text" name="nama_tamu"
            value="{{ old('nama_tamu', $booking->nama_tamu ?? '') }}"
            placeholder="Contoh: Rizky Pratama" required>
+</div>
+
+{{-- Nomor WhatsApp tepat di bawah nama: inilah cara menghubungi tamu.
+     Tamu Tiket.com sering tanpa nomor — untuk mereka boleh "-". --}}
+<div class="fld">
+    <label for="telepon">Nomor WhatsApp</label>
+    <input id="telepon" type="tel" name="telepon" inputmode="tel" autocomplete="off"
+           value="{{ old('telepon', $booking->telepon ?? '') }}"
+           placeholder="08xxxxxxxxxx" required>
+    <label class="wa-tanpa" id="wa-tanpa-box" hidden>
+        <input type="checkbox" id="wa-tanpa"> Tamu Tiket.com tanpa nomor (isi “-”)
+    </label>
+    <div class="hint" id="wa-hint">Dipakai untuk menghubungi tamu lewat WhatsApp.</div>
 </div>
 
 <div class="grid-2">
@@ -388,7 +406,7 @@
         </label>
         <label class="bf-opsi {{ $sumberVal === 'tiket' ? 'aktif' : '' }}">
             <input type="radio" name="sumber" value="tiket" @checked($sumberVal === 'tiket')>
-            <span class="t">Tiket.com<span class="d">Sudah terbayar di muka</span></span>
+            <span class="t">Tiket.com<span class="d">Sudah terbayar · wajib e-tiket</span></span>
         </label>
     </div>
 </div>
@@ -491,8 +509,8 @@
          uang pernah masuk, atau nominal DP ditulis lebih kecil dari yang
          diterima — dan selisihnya tidak muncul di mana-mana.
 
-         Pesanan Tiket.com tidak diminta apa-apa: uangnya masuk lewat mitra,
-         tidak ada transaksi di meja depan yang bisa difoto. --}}
+         Pesanan Tiket.com diminta E-TIKET-nya di kotak yang sama: uangnya
+         masuk lewat mitra, jadi e-tiket itulah sandaran status lunasnya. --}}
     <div class="bukti-box" id="bukti-box" hidden>
         <div class="bukti-ket">
             @include('partials.icon', ['name' => 'clipboard', 'class' => 'ic-lg'])
@@ -500,13 +518,21 @@
         </div>
 
         @if ($adaBuktiBayar)
-            <div class="bukti-ada">
+            <div class="bukti-ada" data-untuk="umum">
                 @include('partials.icon', ['name' => 'check', 'class' => 'ic-xs'])
                 Bukti pembayaran sudah tersimpan{{ $buktiAwalAda ? '' : ' (bukti pelunasan / pembayaran sebelumnya)' }}.
                 @if (! empty($buktiUrl))
                     <a href="{{ $buktiUrl }}" data-lightbox="{{ $buktiUrl }}">Lihat</a>.
                 @endif
                 Tidak perlu unggah lagi, kecuali uang yang diterima bertambah.
+            </div>
+        @endif
+        @if ($adaEtiket)
+            <div class="bukti-ada" data-untuk="tiket">
+                @include('partials.icon', ['name' => 'check', 'class' => 'ic-xs'])
+                E-tiket sudah tersimpan.
+                <a href="{{ route('bayar.awal', $booking) }}" data-lightbox="{{ route('bayar.awal', $booking) }}">Lihat</a>.
+                Tidak perlu unggah lagi, kecuali ingin menggantinya.
             </div>
         @endif
 
@@ -541,13 +567,6 @@
             ])
         </div>
     @endif
-</div>
-
-<div class="fld">
-    <label for="telepon">Nomor Telepon</label>
-    <input id="telepon" type="tel" name="telepon"
-           value="{{ old('telepon', $booking->telepon ?? '') }}"
-           placeholder="08xxxxxxxxxx" required>
 </div>
 
 <div class="note-ktp">
@@ -793,6 +812,34 @@
         if (sumberGrup) sumberGrup.addEventListener('change', terapkanSumber);
         terapkanSumber();
 
+        // ---------- Nomor WhatsApp: "-" hanya untuk tamu Tiket.com ----------
+        const waInput = document.getElementById('telepon');
+        const waBox   = document.getElementById('wa-tanpa-box');
+        const waCek   = document.getElementById('wa-tanpa');
+        let waLama    = '';
+
+        function terapkanWa() {
+            if (!waInput || !sumberGrup) return;
+            const tiket = sumberGrup.querySelector('input[value="tiket"]').checked;
+            if (!tiket && waCek.checked) {           // kembali ke Umum: nomor wajib lagi
+                waCek.checked = false;
+                waInput.value = waLama;
+            }
+            waBox.hidden = !tiket;
+            waCek.checked = tiket && waInput.value.trim() === '-';
+            waInput.readOnly = waCek.checked;
+            waInput.required = !waCek.checked;
+        }
+        if (waCek) {
+            waCek.addEventListener('change', function () {
+                if (waCek.checked) { waLama = waInput.value.trim() === '-' ? '' : waInput.value; waInput.value = '-'; }
+                else { waInput.value = waLama; waInput.focus(); }
+                terapkanWa();
+            });
+        }
+        if (sumberGrup) sumberGrup.addEventListener('change', terapkanWa);
+        terapkanWa();
+
         // ---------- Diskon ----------
         // Tagihan dihitung ulang setiap kali kamar, tanggal, satuan, atau
         // nominal berubah. Server tetap menghitung sendiri saat menyimpan; ini
@@ -944,6 +991,11 @@
 
         const IS_EDIT      = @json($isEdit);
         const ADA_BUKTI    = @json($adaBuktiBayar);
+        const ADA_ETIKET   = @json($adaEtiket);
+        const buktiJudul   = buktiBox ? buktiBox.querySelector('.up-judul span') : null;
+        const buktiHint    = buktiBox ? buktiBox.querySelector('.up-hint') : null;
+        const buktiKosong  = buktiBox ? buktiBox.querySelector('[data-role="empty"]') : null;
+        let modeBukti      = null;
         const DIBAYAR_LAMA = @json($dibayarLama);
         const tambahBox    = document.getElementById('bukti-tambah-box');
         const tambahPesan  = document.getElementById('bukti-tambah-pesan');
@@ -1014,8 +1066,29 @@
             // Bukti awal: hanya bila pesanan ini belum punya bukti apa pun.
             // Kalau sudah punya, kotak ini tetap ada untuk mengganti fotonya —
             // kecuali saat yang dibutuhkan justru bukti selisih.
-            const perlu = !tiket && (status === 'lunas' || status === 'dp') && !(ADA_BUKTI && perluTambah);
+            // Tiket.com selalu diminta e-tiket, kecuali sudah tersimpan dan
+            // yang dibutuhkan sekarang justru bukti bayar selisih.
+            const perlu = tiket
+                ? !(ADA_ETIKET && perluTambah)
+                : (status === 'lunas' || status === 'dp') && !(ADA_BUKTI && perluTambah);
             buktiBox.hidden = !perlu;
+
+            // Ganti Umum <-> Tiket.com: foto yang terlanjur dipilih untuk jenis
+            // bukti yang lain dibuang, supaya bukti bayar tidak tersimpan
+            // sebagai e-tiket (atau sebaliknya).
+            const mode = tiket ? 'tiket' : 'umum';
+            if (modeBukti !== null && modeBukti !== mode && buktiInput) buktiInput.value = '';
+            modeBukti = mode;
+            buktiBox.querySelectorAll('.bukti-ada').forEach(function (el) { el.hidden = el.dataset.untuk !== mode; });
+            if (buktiJudul) buktiJudul.textContent = tiket ? 'E-tiket Tiket.com' : 'Bukti pembayaran';
+            if (buktiKosong && buktiKosong.lastChild && buktiKosong.lastChild.nodeType === 3) {
+                buktiKosong.lastChild.textContent = tiket ? ' Belum ada e-tiket. ' : ' Belum ada bukti pembayaran. ';
+            }
+            if (buktiHint) {
+                buktiHint.textContent = (tiket ? ADA_ETIKET : ADA_BUKTI)
+                    ? 'Opsional — hanya bila ingin mengganti.'
+                    : (tiket ? 'Wajib — foto atau screenshot e-tiket.' : 'Wajib.');
+            }
 
             // Berkas yang terlanjur dipilih ikut dibuang saat kotaknya
             // disembunyikan, supaya pesanan "Belum Lunas" tidak pernah terkirim
@@ -1024,7 +1097,9 @@
             if (!perlu && buktiInput) buktiInput.value = '';
 
             if (perlu && buktiPesan) {
-                buktiPesan.textContent = status === 'lunas'
+                buktiPesan.textContent = tiket
+                    ? 'Pesanan Tiket.com — unggah foto atau screenshot e-tiket dari Tiket.com sebagai bukti pesanan.'
+                    : status === 'lunas'
                     ? 'Pesanan ditandai LUNAS — unggah bukti pembayaran ' + rupiah(tagihan) + ' yang sudah diterima.'
                     : 'Pesanan ditandai DP — unggah bukti pembayaran uang muka ' + rupiah(dp) + ' yang sudah diterima.';
             }

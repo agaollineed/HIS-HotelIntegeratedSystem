@@ -248,6 +248,7 @@ class BookingController extends Controller
             // tambahan) dianggap sudah ada.
             'adaBukti'    => Booking::adaBuktiBayarDi($anggota),
             'buktiUrl'    => $this->urlBuktiBayar($anggota),
+            'adaEtiket'   => Booking::adaEtiketDi($anggota),
             'dibayarLama' => $booking->dibayar(Booking::totalPesananDari($anggota)),
             'pindahDari'  => $booking->pindahDari()->with('room')->first(),
             'pindahKe'    => $booking->pindahKe()->with('room')->first(),
@@ -282,11 +283,12 @@ class BookingController extends Controller
         // Bukti bayar AWAL hanya diminta bila pesanan ini belum punya bukti
         // apa pun. Pesanan yang dilunasi saat check-in sudah punya buktinya
         // (bukti pelunasan) — memindah kamarnya tidak boleh memintanya lagi.
+        // Tiket.com: yang dicek e-tiketnya, bukan bukti bayar di meja depan.
         $this->validasiBuktiBayarAwal(
             $request,
             (string) ($data['status_bayar'] ?? Booking::BAYAR_BELUM),
             (string) $data['sumber'],
-            $adaBukti,
+            Booking::buktiAwalLengkapDi($members, (string) $data['sumber']),
         );
 
         [$checkIn, $checkOut, $malam] = $this->rangeFrom($data);
@@ -411,6 +413,14 @@ class BookingController extends Controller
             }
 
             $fotoBayarAwal = $baru;
+        } elseif ($fotoBayarAwal && $booking->dariTiket() && $data['sumber'] !== Booking::SUMBER_TIKET) {
+            // Pindah dari Tiket.com ke Umum tanpa bukti baru: e-tiket lama
+            // bukan bukti uang yang diterima hotel, jadi dilepas supaya tidak
+            // terbaca sebagai bukti bayar.
+            if (! Booking::where('foto_bayar_awal', $fotoBayarAwal)->whereNotIn('id', $ignore)->exists()) {
+                Storage::disk('local')->delete($fotoBayarAwal);
+            }
+            $fotoBayarAwal = null;
         }
 
         DB::transaction(function () use ($rencana, $members, $data, $breakfast, $checkIn, $malam, $checkOut, $statusBayar, $dp, $diskon, $persen, $fotoBayarAwal, $fotoTambahan) {
@@ -1021,7 +1031,8 @@ class BookingController extends Controller
     private function urlBuktiBayar(Collection $anggota): ?string
     {
         foreach ($anggota as $b) {
-            if ($b->foto_bayar_awal) {
+            // Foto awal pesanan Tiket.com adalah e-tiket, bukan bukti bayar.
+            if ($b->foto_bayar_awal && ! $b->dariTiket()) {
                 return route('bayar.awal', $b);
             }
         }
@@ -1091,11 +1102,11 @@ class BookingController extends Controller
      */
     private function validatedMulti(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'room_ids'   => 'required|array|min:1',
             'room_ids.*' => 'required|distinct|exists:rooms,id',
             'nama_tamu'  => 'required|string|max:255',
-            'telepon'    => 'required|string|max:30',
+            'telepon'    => $this->aturanTelepon($request),
             'breakfast'  => 'nullable|boolean',
             'check_in'     => 'required|date|after_or_equal:' . self::batasMundur(),
             'check_out'    => 'required|date|after:check_in',
@@ -1114,6 +1125,8 @@ class BookingController extends Controller
             'check_in.after_or_equal' => 'Tanggal check-in paling jauh ' . self::MUNDUR_MAKS_HARI
                 . ' hari ke belakang. Untuk tamu yang datang dini hari, pilih tanggal kemarin.',
         ]);
+
+        return $this->rapikanTelepon($data);
     }
 
     /**
@@ -1121,10 +1134,10 @@ class BookingController extends Controller
      */
     private function validatedSingle(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'room_id'   => 'required|exists:rooms,id',
             'nama_tamu' => 'required|string|max:255',
-            'telepon'   => 'required|string|max:30',
+            'telepon'   => $this->aturanTelepon($request),
             'breakfast' => 'nullable|boolean',
             'check_in'     => 'required|date',
             'check_out'    => 'required|date|after:check_in',
@@ -1138,13 +1151,47 @@ class BookingController extends Controller
             'room_id.required' => 'Pilih kamar terlebih dahulu.',
             'room_id.exists'   => 'Kamar yang dipilih tidak ditemukan.',
         ]);
+
+        return $this->rapikanTelepon($data);
+    }
+
+    /**
+     * Nomor WhatsApp tamu: wajib dan harus nomor yang bisa dihubungi. Tamu
+     * Tiket.com sering datang tanpa nomor (pesanan lewat mitra), jadi untuk
+     * mereka boleh "-" atau dikosongkan.
+     */
+    private function aturanTelepon(Request $request): array
+    {
+        return ['required_unless:sumber,' . Booking::SUMBER_TIKET, 'nullable', 'string', 'max:30',
+            function (string $attr, $nilai, \Closure $gagal) use ($request) {
+                $v = trim((string) $nilai);
+                if ($v === Booking::TANPA_TELEPON) {
+                    if ($request->input('sumber') !== Booking::SUMBER_TIKET) {
+                        $gagal('Isi nomor WhatsApp tamu. Tanda "-" hanya untuk tamu Tiket.com.');
+                    }
+                    return;
+                }
+                $angka = strlen(preg_replace('/\D/', '', $v));
+                if (! preg_match('/^\+?[0-9][0-9 .\-]*$/', $v) || $angka < 9 || $angka > 15) {
+                    $gagal('Nomor WhatsApp tidak valid — tulis angka saja, contoh 081234567890.');
+                }
+            }];
+    }
+
+    /** Tamu Tiket.com tanpa nomor disimpan sebagai "-". */
+    private function rapikanTelepon(array $data): array
+    {
+        $v = trim((string) ($data['telepon'] ?? ''));
+        $data['telepon'] = $v === '' ? Booking::TANPA_TELEPON : $v;
+
+        return $data;
     }
 
     private function pesan(): array
     {
         return [
             'nama_tamu.required' => 'Nama tamu wajib diisi.',
-            'telepon.required'   => 'Nomor telepon wajib diisi.',
+            'telepon.required_unless' => 'Nomor WhatsApp tamu wajib diisi (tamu Tiket.com tanpa nomor boleh diisi "-").',
             'check_in.required'   => 'Tanggal check-in wajib diisi.',
             'check_in.date'       => 'Tanggal check-in tidak valid.',
             'check_out.required'  => 'Tanggal check-out wajib diisi.',
@@ -1167,9 +1214,12 @@ class BookingController extends Controller
      * nominal DP — tidak punya satu pun sandaran di luar ingatan orang yang
      * mengetiknya.
      *
+     * Pesanan Tiket.com selalu wajib: buktinya e-tiket dari Tiket.com.
+     *
      * $adaBukti diisi pada formulir UBAH: pesanan yang sudah punya bukti
-     * dalam bentuk apa pun (awal, pelunasan saat check-in, atau tambahan)
-     * tidak perlu mengunggah ulang hanya karena barisnya disunting.
+     * dalam bentuk apa pun (awal, pelunasan saat check-in, atau tambahan —
+     * atau e-tiket untuk Tiket.com) tidak perlu mengunggah ulang hanya karena
+     * barisnya disunting.
      */
     private function validasiBuktiBayarAwal(
         Request $request,
@@ -1180,15 +1230,17 @@ class BookingController extends Controller
         $wajib = Booking::butuhBuktiBayarAwal($statusBayar, $sumber) && ! $adaBukti;
 
         $label = $statusBayar === Booking::BAYAR_LUNAS ? 'Lunas' : 'DP';
+        $nama  = $sumber === Booking::SUMBER_TIKET ? 'E-tiket' : 'Bukti pembayaran';
 
         $request->validate([
             'foto_bayar_awal' => ($wajib ? 'required' : 'nullable') . '|image|mimes:jpg,jpeg,png|max:8192',
         ], [
-            'foto_bayar_awal.required' => 'Status pembayaran "' . $label
-                . '" berarti uang sudah diterima — unggah foto bukti pembayarannya.',
-            'foto_bayar_awal.image'    => 'Bukti pembayaran harus berupa gambar.',
-            'foto_bayar_awal.mimes'    => 'Bukti pembayaran harus berformat JPG atau PNG.',
-            'foto_bayar_awal.max'      => 'Ukuran bukti pembayaran maksimal 8 MB.',
+            'foto_bayar_awal.required' => $sumber === Booking::SUMBER_TIKET
+                ? 'Pesanan Tiket.com wajib melampirkan e-tiket — unggah foto atau screenshot e-tiketnya.'
+                : 'Status pembayaran "' . $label . '" berarti uang sudah diterima — unggah foto bukti pembayarannya.',
+            'foto_bayar_awal.image'    => $nama . ' harus berupa gambar.',
+            'foto_bayar_awal.mimes'    => $nama . ' harus berformat JPG atau PNG.',
+            'foto_bayar_awal.max'      => 'Ukuran ' . strtolower($nama) . ' maksimal 8 MB.',
         ]);
     }
 

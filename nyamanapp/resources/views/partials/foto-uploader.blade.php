@@ -72,6 +72,11 @@
         transition: border-color .2s, background .2s;
     }
     .uploader.has-file { border-style: solid; background: var(--bg); }
+    /* Seret & lepas: kotak menyala saat foto dibawa ke atasnya. */
+    .uploader.seret { border-style: dashed; border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .uploader.seret * { pointer-events: none; }
+    .up-seret-ket { margin-top: 10px; font-size: .78rem; color: var(--muted); }
+    @media (hover: none), (pointer: coarse) { .up-seret-ket { display: none; } }
     .uploader + .uploader { margin-top: 18px; }
 
     .up-judul {
@@ -185,6 +190,8 @@
             @include('partials.icon', ['name' => 'image', 'class' => 'ic']) Pilih File
         </button>
     </div>
+
+    <div class="up-seret-ket">atau seret &amp; lepas foto ke kotak ini</div>
 
     <div class="up-name" data-role="name" hidden></div>
     <div class="up-galat" data-role="galat" hidden></div>
@@ -648,6 +655,44 @@
             }, kameraBawaan);
         });
 
+        /* ---------- Seret & lepas (komputer) ----------
+           Foto dibawa dari folder/desktop dan dilepas di atas kotak: masuk
+           ke input utama lewat jalur yang sama dengan tombol Pilih File
+           (diperkecil, pratinjau, lalu event change untuk halaman). */
+        const bawaBerkas = e => !!(e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1);
+        let tumpuk = 0;
+        kotak.addEventListener('dragenter', function (e) {
+            if (!bawaBerkas(e)) return;
+            e.preventDefault();
+            tumpuk++;
+            kotak.classList.add('seret');
+        });
+        kotak.addEventListener('dragover', function (e) {
+            if (!bawaBerkas(e)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+        kotak.addEventListener('dragleave', function () {
+            if (--tumpuk <= 0) { tumpuk = 0; kotak.classList.remove('seret'); }
+        });
+        kotak.addEventListener('drop', function (e) {
+            if (!bawaBerkas(e)) return;
+            e.preventDefault();
+            tumpuk = 0;
+            kotak.classList.remove('seret');
+            const f = e.dataTransfer.files && e.dataTransfer.files[0];
+            if (!f) return;
+            if (!/^image\/(jpeg|png)$/.test(f.type)) {
+                galat('Berkas "' + f.name + '" bukan foto JPG/PNG. Untuk e-tiket PDF, ambil screenshot-nya dulu.');
+                return;
+            }
+            if (!taruhDiInput(f)) {
+                galat('Peramban ini tidak mendukung seret & lepas — pakai tombol Pilih File.');
+                return;
+            }
+            proses(f).finally(beritahuPerubahan);
+        });
+
         mainInput.addEventListener('change', function () {
             if (sedangMenulisBalik) { sedangMenulisBalik = false; return; }
             const f = this.files && this.files[0];
@@ -658,6 +703,18 @@
     }
 
     document.querySelectorAll('[data-uploader]').forEach(pasang);
+
+    // Foto yang terlepas DI LUAR kotak unggah jangan sampai dibuka peramban —
+    // itu meninggalkan halaman dan isian formulir hilang.
+    ['dragover', 'drop'].forEach(function (jenis) {
+        window.addEventListener(jenis, function (e) {
+            if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1
+                && !(e.target.closest && e.target.closest('[data-uploader]'))) {
+                e.preventDefault();
+                if (jenis === 'dragover') e.dataTransfer.dropEffect = 'none';
+            }
+        });
+    });
 })();
 </script>
 @endpush

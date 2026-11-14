@@ -2,7 +2,56 @@
 
 ---
 
-## 0. Tampilan Keuangan dirapikan
+## 0. Unggah foto dengan seret & lepas, dan Nomor WhatsApp tamu
+
+Tidak ada migrasi untuk bagian ini.
+
+**Seret & lepas foto**
+- Semua kotak unggah foto (e-tiket, bukti bayar, KTP, check-out, absensi, laporan) sekarang bisa
+  diisi dengan **menyeret foto dari folder/desktop lalu melepasnya di atas kotak**. Kotaknya menyala
+  ungu saat foto dibawa ke atasnya, lalu foto diperkecil otomatis seperti tombol "Pilih File".
+- Berkas yang bukan JPG/PNG (mis. PDF e-tiket) ditolak dengan pesan untuk mengambil screenshot-nya.
+- Foto yang terlepas di luar kotak tidak lagi membuka gambar di browser (isian formulir aman).
+
+**Nomor WhatsApp**
+- Kolom telepon diganti **"Nomor WhatsApp"** dan dipindah ke atas, tepat di bawah nama tamu.
+- Nomor harus nomor sungguhan (9–15 angka; boleh 08…, +62…, dengan spasi/strip).
+- Tamu **Tiket.com** yang tidak meninggalkan nomor: centang **"Tamu Tiket.com tanpa nomor"**
+  (kolom terisi "-"). Untuk pesanan Umum, "-" ditolak.
+- Di daftar kamar admin dan staff, nomor tamu bisa **diklik untuk langsung chat WhatsApp**
+  (wa.me). Tamu tanpa nomor ditulis "Tanpa nomor".
+
+---
+
+## 1. E-tiket wajib untuk Tiket.com, dan Saldo Rekening otomatis dari Buku Besar
+
+Tidak ada migrasi untuk bagian ini.
+
+**E-tiket Tiket.com**
+- Pesanan Tiket.com sekarang **wajib melampirkan e-tiket** (foto atau screenshot) saat dibuat. Tanpa
+  e-tiket, pesanan ditolak dengan pesan yang jelas. Statusnya tetap otomatis lunas.
+- Kotak unggahnya sama dengan bukti bayar, tetapi berjudul "E-tiket Tiket.com". Begitu asal pesanan
+  diganti ke Umum, kotaknya kembali menjadi bukti pembayaran (foto yang terlanjur dipilih dibuang).
+- Pesanan Tiket.com lama yang belum punya e-tiket diminta e-tiketnya saat diubah, dan di daftar kamar
+  admin ditandai "Pesanan Tiket.com tanpa e-tiket".
+- E-tiket **tidak dihitung sebagai bukti bayar hotel**. Jadi selisih upgrade/tambah malam tetap
+  diminta bukti bayarnya, dan pesanan yang dipindah dari Tiket.com ke Umum tidak bisa memakai
+  e-tiket sebagai bukti lunas.
+
+**Saldo Rekening dari Buku Besar**
+- Saldo **tidak diketik lagi**. Semua angka di halaman Saldo Rekening dihitung dari Buku Besar:
+  saldo saat ini (BNI, BRI, total), grafik saldo harian, dan perbandingan setiap tanggal 5.
+- Mencatat atau mengoreksi transaksi di Buku Besar langsung menggeser angka dan grafik di halaman
+  Saldo (halaman menyegarkan diri tiap 30 detik).
+- Tombol utama menjadi **"Catat Transaksi"**, yang membuka Buku Besar dengan jendela catat hari ini.
+- Di bawah grafik ada daftar 7 hari transaksi terakhir (masuk, keluar, saldo akhir).
+- Export CSV sekarang berisi saldo akhir BNI, BRI, dan total setiap hari. Import CSV saldo dan
+  hapus saldo dihapus karena tidak diperlukan lagi.
+- Data saldo yang dulu diketik manual (tabel `saldo_harian`) **tidak dihapus**, hanya tidak dipakai.
+
+---
+
+## 2. Tampilan Keuangan dirapikan
 
 Tidak ada migrasi untuk bagian ini.
 
@@ -25,7 +74,7 @@ yang sama — lebih sedikit tombol, angka penting lebih menonjol:
 
 ---
 
-## 1. Keuangan: Pajak dan Buku Besar (+ perbaikan keamanan folder)
+## 3. Keuangan: Pajak dan Buku Besar (+ perbaikan keamanan folder)
 
 **Wajib setelah unggah:** `php artisan migrate --force` lalu `php artisan optimize:clear`.
 Ada dua migrasi: tabel pajak & buku besar, dan **isi buku besar dari Excel "SALDO BANK"**
@@ -63,7 +112,7 @@ kini menolak semua jalur itu kecuali folder public. nyamanapp.site tidak terpeng
 
 ---
 
-## 2. Halaman pembuka (logo) dan halaman login baru
+## 4. Halaman pembuka (logo) dan halaman login baru
 
 Tidak ada migrasi untuk bagian ini.
 
@@ -78,7 +127,7 @@ Tidak ada migrasi untuk bagian ini.
 
 ---
 
-## 3. Keuangan: saldo rekening harian, keuntungan, dan bonus karyawan
+## 5. Keuangan: saldo rekening harian, keuntungan, dan bonus karyawan
 
 **Wajib setelah unggah:** `php artisan migrate --force` (satu tabel baru: saldo harian) lalu `php artisan optimize:clear`.
 
@@ -131,7 +180,7 @@ catatan saldo maupun bulan tetap hanya superadmin.
 
 ---
 
-## 4. Check-in dan check-out per kamar dalam satu pesanan
+## 6. Check-in dan check-out per kamar dalam satu pesanan
 
 Bagian ini tidak menambah migrasi.
 
@@ -171,7 +220,7 @@ disamakan untuk semua kamar.
 
 ---
 
-## 5. Tombol Edit, filter kamar, extend otomatis, dan pengingat check-out
+## 7. Tombol Edit, filter kamar, extend otomatis, dan pengingat check-out
 
 **Wajib setelah unggah:** `php artisan migrate --force` lalu `php artisan optimize:clear`.
 Ada satu migrasi baru yang menambah dua kolom (catatan extend otomatis); data lama tidak berubah.
@@ -215,7 +264,7 @@ Ada satu migrasi baru yang menambah dua kolom (catatan extend otomatis); data la
 
 ---
 
-## 6. Renovasi tampilan + pindah kamar langsung (tanpa persetujuan)
+## 8. Renovasi tampilan + pindah kamar langsung (tanpa persetujuan)
 
 **Tampilan**
 - Menu kini berada di **sidebar kiri** untuk semua peran (superadmin, admin,
@@ -262,7 +311,7 @@ Berkas: `routes/web.php`, `app/Support/PindahKamarHarian.php`,
 
 ---
 
-## 7. Siap dilewatkan Cloudflare
+## 9. Siap dilewatkan Cloudflare
 
 Aplikasi kini mengenali Cloudflare sebagai perantara resmi. Bila nanti domain
 dipindah ke Cloudflare, IP pengunjung asli tetap terbaca benar — penting untuk
@@ -274,7 +323,7 @@ Berkas: `bootstrap/app.php`.
 
 ---
 
-## 8. Invoice: buat dan cetak untuk admin & superadmin
+## 10. Invoice: buat dan cetak untuk admin & superadmin
 
 Rute pembuatan invoice untuk admin sebenarnya sudah ada, tetapi tidak ada tombol
 yang menuju ke sana — halaman Invoice admin hanya berisi ringkasan dan daftar,
@@ -293,7 +342,7 @@ Diuji untuk ketiga peran: superadmin, admin, dan staff.
 
 ---
 
-## 9. Pencarian tamu, pindah kamar per hari, bukti bayar, dan perbaikan konsistensi
+## 11. Pencarian tamu, pindah kamar per hari, bukti bayar, dan perbaikan konsistensi
 
 **Wajib setelah unggah:** jalankan `php artisan migrate --force`. Ada satu
 migrasi baru yang menambah tiga kolom, tanpa mengubah data yang sudah ada.
@@ -379,7 +428,7 @@ memori), ditambah pemeriksaan tampilan di browser dengan data demo.
 
 ---
 
-## 10. Tukar kamar saat kamar tujuan terisi + ikon tab browser
+## 12. Tukar kamar saat kamar tujuan terisi + ikon tab browser
 
 **Tukar kamar.** Pindah kamar ke kamar yang sedang terisi dulu selalu ditolak,
 dan itu paling menyulitkan justru saat hotel penuh: tamu 101 ingin ke 102,
@@ -409,7 +458,7 @@ halaman (`public/favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, lewat
 
 ---
 
-## 11. Pengajuan perubahan booking (staff → persetujuan admin)
+## 13. Pengajuan perubahan booking (staff → persetujuan admin)
 
 Staff kini bisa mengusulkan **pindah kamar**, **perpanjang menginap**, **ubah
 tanggal**, dan **ubah nama/telepon** — tetapi booking baru berubah setelah admin
@@ -458,7 +507,7 @@ dihapus, tidak ada baris yang dibuang, tidak ada kolom lama yang diubah artinya.
 
 ---
 
-## 12. Tipe kamar: 101 → Twin, 105 → King
+## 14. Tipe kamar: 101 → Twin, 105 → King
 
 Dikerjakan lewat migrasi yang hanya meng-`update` kolom `tipe` pada dua baris
 kamar. Kamarnya **tidak** dihapus dan dibuat ulang, sehingga `rooms.id` tetap
@@ -479,7 +528,7 @@ di seeder sudah ikut disamakan.
 
 ---
 
-## 13. Diskon
+## 15. Diskon
 
 Kotak **Diskon** di formulir booking, dengan pemilih satuan **Rupiah / Persen**
 dan tombol cepat 5% / 10% / 15% / 20%.
@@ -500,7 +549,7 @@ admin, export Excel, dan catatan invoice.
 
 ---
 
-## 14. Booking untuk tanggal yang sudah lewat
+## 16. Booking untuk tanggal yang sudah lewat
 
 Check-in boleh mundur sampai **7 hari**, dengan tombol **"Tamu datang dini hari
 (malam kemarin)"** yang sekali tekan menyetel check-in = kemarin, check-out =
@@ -513,7 +562,7 @@ batasnya.
 
 ---
 
-## 15. Wewenang penuh admin atas kamar + status check-in
+## 17. Wewenang penuh admin atas kamar + status check-in
 
 Admin sekarang bisa **membuat booking, check-in, check-out, dan menandai late**
 — kapan pun, tanpa batas waktu.

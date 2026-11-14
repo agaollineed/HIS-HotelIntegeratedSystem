@@ -155,15 +155,13 @@ Route::middleware('auth')->group(function () {
                 Route::post('akun/{user}/role', [AkunController::class, 'role'])->name('akun.role');
             });
 
-            // ---------- Keuangan: saldo rekening harian & keuntungan bulanan ----------
+            // ---------- Keuangan: saldo rekening, keuntungan, pajak, buku besar ----------
             // Admin dan superadmin mengisi dan melihat. Menghapus catatan hanya
             // superadmin (dijaga di controller lewat bolehHapusKeuangan()).
+            // Saldo rekening hanya dibaca: angkanya dihitung dari Buku Besar.
             Route::get('keuangan/saldo', [SaldoController::class, 'index'])->name('keuangan.saldo');
-            Route::post('keuangan/saldo', [SaldoController::class, 'store'])->name('keuangan.saldo.store');
             Route::get('keuangan/saldo/data', [SaldoController::class, 'data'])->name('keuangan.saldo.data');
             Route::get('keuangan/saldo/export', [SaldoController::class, 'exportCsv'])->name('keuangan.saldo.export');
-            Route::post('keuangan/saldo/import', [SaldoController::class, 'importCsv'])->name('keuangan.saldo.import');
-            Route::delete('keuangan/saldo/{saldo}', [SaldoController::class, 'destroy'])->name('keuangan.saldo.destroy');
 
             Route::get('keuangan/pajak', [PajakController::class, 'index'])->name('keuangan.pajak');
             Route::post('keuangan/pajak', [PajakController::class, 'store'])->name('keuangan.pajak.store');

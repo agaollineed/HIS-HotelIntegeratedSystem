@@ -20,6 +20,8 @@
     .sl-rentang button[aria-pressed="true"] { background: var(--grad); color: #fff; }
 
     .sl-plot { position: relative; min-height: 260px; }
+    .keu-tabel td a { color: inherit; font-weight: 700; text-decoration: none; }
+    .keu-tabel td a:hover { text-decoration: underline; }
     .sl-plot svg { display: block; width: 100%; height: 260px; overflow: visible; }
     .sl-plot .grid line { stroke: var(--border-2); stroke-width: 1; }
     .sl-plot .grid text, .sl-plot .sumbu-x text { fill: var(--muted); font-size: 11px; font-family: inherit; font-variant-numeric: tabular-nums; }
@@ -35,6 +37,7 @@
     }
     .sl-tip span { display: block; font-weight: 700; }
     .sl-tip b { display: block; font-size: .92rem; font-variant-numeric: tabular-nums; }
+    .sl-tip small { display: block; color: var(--muted); font-size: .72rem; margin-top: 2px; font-variant-numeric: tabular-nums; }
     .sl-tip[hidden] { display: none; }
     .sl-kosong { text-align: center; color: var(--muted); padding: 60px 20px; font-size: .92rem; }
 
@@ -55,26 +58,24 @@
     .sl-kol .batang.kosong { background: none; border: 1px dashed var(--border); height: 100%; border-radius: 7px; }
     .sl-kol .bln { font-size: .72rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
     .sl-kol .beda { font-size: .68rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .sl-kol .pakai { font-size: .64rem; color: var(--muted); white-space: nowrap; }
 
 </style>
 @endpush
 
 @section('content')
     @php
-        $rp = fn (int $n) => \App\Models\SaldoHarian::rupiah($n);
+        $rp = fn (int $n) => \App\Support\CsvKeuangan::rupiah($n);
         $teksBeda = fn ($n) => $n === null ? '—' : (($n > 0 ? '+' : ($n < 0 ? '−' : '')) . $rp(abs($n)));
         $kelasBeda = fn ($n) => $n === null ? '' : ($n > 0 ? 'naik' : ($n < 0 ? 'turun' : 'tetap'));
-        $bolehHapus = auth()->user()->bolehHapusKeuangan();
-        $isiBaru = ['tanggal' => $tglHariIni, 'saldo' => $hariIni?->saldo, '_judul' => 'Catat Saldo'];
+        $tglLima = \App\Support\BukuBesarLaporan::TANGGAL_BANDING;
     @endphp
 
     @include('admin.keuangan._kepala', [
-        'sub'     => 'Saldo rekening harian, grafik diperbarui otomatis.',
-        'catat'   => ['label' => 'Catat Saldo', 'dialog' => 'dlg-catat', 'isi' => $isiBaru],
+        'sub'     => 'Saldo BNI & BRI — dihitung otomatis dari Buku Besar.',
+        'catat'   => ['label' => 'Catat Transaksi', 'href' => route('admin.keuangan.buku-besar', ['catat' => 1])],
         'lainnya' => [
-            ['label' => 'Export CSV', 'href' => route('admin.keuangan.saldo.export'), 'ket' => 'Unduh semua saldo'],
-            ['label' => 'Import CSV', 'dialog' => 'dlg-impor', 'ket' => 'Masukkan data lama sekaligus'],
+            ['label' => 'Buka Buku Besar', 'href' => route('admin.keuangan.buku-besar'), 'ket' => 'Lihat & koreksi transaksi harian'],
+            ['label' => 'Export CSV', 'href' => route('admin.keuangan.saldo.export'), 'ket' => 'Saldo akhir BNI, BRI & total tiap hari'],
         ],
     ])
 
@@ -82,25 +83,24 @@
 
     <div class="hero">
         <div class="hero-utama">
-            <div class="lbl">Saldo rekening terakhir</div>
+            <div class="lbl">Saldo rekening saat ini</div>
             <div class="angka" id="r-saldo">{{ $ringkas['saldo'] !== null ? $rp($ringkas['saldo']) : '—' }}</div>
-            <div class="ket"><span id="r-tanggal">{{ $ringkas['tanggal'] ?? 'Belum ada catatan' }}</span></div>
+            <div class="ket">
+                <span class="chip tetap">BNI <b id="r-bni">{{ $ringkas['bni'] !== null ? $rp($ringkas['bni']) : '—' }}</b></span>
+                <span class="chip tetap">BRI <b id="r-bri">{{ $ringkas['bri'] !== null ? $rp($ringkas['bri']) : '—' }}</b></span>
+                <span id="r-tanggal">{{ $ringkas['tanggal'] ? 'per ' . $ringkas['tanggal'] : 'Buku Besar masih kosong' }}</span>
+            </div>
         </div>
         <div class="card hero-stat">
-            <div class="lbl">Perubahan</div>
+            <div class="lbl">Transaksi terakhir</div>
             <div class="n {{ $kelasBeda($ringkas['perubahan']) }}" id="r-ubah">{{ $teksBeda($ringkas['perubahan']) }}</div>
-            <div class="sub" id="r-ubah-sub">{{ $ringkas['tanggalSebelum'] ? 'dibanding ' . $ringkas['tanggalSebelum'] : 'dibanding catatan sebelumnya' }}</div>
+            <div class="sub" id="r-ubah-sub">{{ $ringkas['tanggalUbah'] ? 'bersih ' . $ringkas['tanggalUbah'] : 'belum ada transaksi' }}</div>
         </div>
         <div class="card hero-stat">
-            <div class="lbl">Dibanding tgl {{ \App\Models\SaldoHarian::TANGGAL_BANDING }}</div>
+            <div class="lbl">Dibanding tgl {{ $tglLima }}</div>
             <div class="n {{ $kelasBeda($ringkas['vsLima']) }}" id="r-lima">{{ $teksBeda($ringkas['vsLima']) }}</div>
-            <div class="sub">bulan ini</div>
+            <div class="sub" id="r-lima-sub">{{ $ringkas['tanggalLima'] ? 'dari saldo ' . $ringkas['tanggalLima'] : '—' }}</div>
         </div>
-    </div>
-
-    <div class="ajak" id="r-ajak" @if ($ringkas['hariIniTercatat']) hidden @endif>
-        <span>Saldo <b>hari ini</b> ({{ now()->translatedFormat('j F') }}) belum dicatat.</span>
-        <button type="button" class="btn btn-accent btn-sm" data-buka="dlg-catat" data-isi="{{ json_encode($isiBaru) }}">Catat sekarang</button>
     </div>
 
     <div class="sl-dua">
@@ -108,7 +108,7 @@
             <div class="sl-top">
                 <div>
                     <h2>Saldo Harian</h2>
-                    <p>Arahkan kursor atau sentuh grafik untuk melihat angkanya.</p>
+                    <p>Saldo akhir BNI + BRI tiap hari. Sentuh grafik untuk rinciannya.</p>
                 </div>
                 <div class="sl-rentang" role="group" aria-label="Rentang grafik">
                     <button type="button" data-rentang="30" aria-pressed="false">30 hari</button>
@@ -119,14 +119,14 @@
             <div class="sl-plot" id="sl-plot">
                 <div class="sl-kosong">Memuat grafik…</div>
             </div>
-            <span class="sl-live"><span class="dot"></span> Live — diperbarui otomatis <span id="sl-waktu"></span></span>
+            <span class="sl-live"><span class="dot"></span> Live — ikut berubah saat Buku Besar diisi <span id="sl-waktu"></span></span>
         </div>
 
         <div class="card sl-card">
             <div class="sl-top">
                 <div>
-                    <h2>Tiap Tanggal {{ \App\Models\SaldoHarian::TANGGAL_BANDING }}</h2>
-                    <p>Sejak {{ \Illuminate\Support\Carbon::parse(\App\Models\SaldoHarian::MULAI_BANDING)->translatedFormat('F Y') }}; tanggal 5 kosong memakai saldo terakhir tgl 1–5.</p>
+                    <h2>Tiap Tanggal {{ $tglLima }}</h2>
+                    <p>Saldo akhir hari tanggal {{ $tglLima }}, sejak {{ \Illuminate\Support\Carbon::parse(\App\Support\BukuBesarLaporan::MULAI_BANDING)->translatedFormat('F Y') }}.</p>
                 </div>
             </div>
             <div class="sl-lima" id="sl-lima">
@@ -139,33 +139,28 @@
 
     <div class="card keu-kartu">
         <div class="keu-kartu-kepala">
-            <h2>Riwayat</h2>
-            <span class="ket">31 catatan terakhir · klik baris untuk mengubah</span>
+            <h2>Transaksi Terakhir</h2>
+            <a class="btn btn-ghost btn-sm" href="{{ route('admin.keuangan.buku-besar') }}">Buka Buku Besar →</a>
         </div>
-        @if ($riwayat->isEmpty())
-            <div class="keu-kosong">Belum ada saldo yang dicatat.</div>
+        @if ($transaksi->isEmpty())
+            <div class="keu-kosong">Belum ada transaksi di Buku Besar.</div>
         @else
             <div class="keu-tabel-wrap">
                 <table class="keu-tabel">
                     <thead>
-                        <tr><th>Tanggal</th><th class="num">Saldo</th><th class="num">Perubahan</th><th>Dicatat</th><th></th></tr>
+                        <tr><th>Tanggal</th><th class="num">Masuk</th><th class="num">Keluar</th><th class="num">Saldo akhir</th></tr>
                     </thead>
                     <tbody>
-                        @foreach ($riwayat as $i => $s)
-                            @php
-                                $lama = $riwayat->get($i + 1);
-                                $beda = $lama ? $s->saldo - $lama->saldo : null;
-                                $isi = ['tanggal' => $s->tanggal->toDateString(), 'saldo' => $s->saldo, '_kunci' => true,
-                                    '_judul' => 'Ubah Saldo ' . $s->tanggal->translatedFormat('j M Y'),
-                                    '_hapus' => $bolehHapus ? route('admin.keuangan.saldo.destroy', $s) : null,
-                                    '_hapusTanya' => 'Hapus saldo ' . $s->tanggal->translatedFormat('j F Y') . '?'];
-                            @endphp
-                            <tr class="bisa-klik" tabindex="0" data-buka="dlg-catat" data-isi="{{ json_encode($isi) }}">
-                                <td>{{ $s->tanggal->translatedFormat('D, j M Y') }}</td>
-                                <td class="num"><b>{{ $rp($s->saldo) }}</b></td>
-                                <td class="num {{ $kelasBeda($beda) }}">{{ $teksBeda($beda) }}</td>
-                                <td class="redup">{{ $s->pencatat?->name ?? '—' }}</td>
-                                <td class="pena">@include('partials.icon', ['name' => 'pensil', 'class' => 'ic-xs'])</td>
+                        @foreach ($transaksi as $t)
+                            @php $tg = \Illuminate\Support\Carbon::parse($t['tanggal']); @endphp
+                            <tr>
+                                <td>
+                                    <a href="{{ route('admin.keuangan.buku-besar', ['bulan' => $tg->format('Y-m')]) }}">{{ $tg->translatedFormat('D, j M Y') }}</a>
+                                    @if ($t['keterangan'])<span class="redup">{{ $t['keterangan'] }}</span>@endif
+                                </td>
+                                <td class="num {{ $t['masuk'] > 0 ? 'naik' : 'tetap' }}">{{ $t['masuk'] > 0 ? '+' . $rp($t['masuk']) : '—' }}</td>
+                                <td class="num {{ $t['keluar'] > 0 ? 'turun' : 'tetap' }}">{{ $t['keluar'] > 0 ? '−' . $rp($t['keluar']) : '—' }}</td>
+                                <td class="num"><b>{{ $rp($t['saldo']) }}</b></td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -173,51 +168,6 @@
             </div>
         @endif
     </div>
-
-    {{-- Jendela catat / ubah saldo --}}
-    <dialog class="keu-dlg" id="dlg-catat" data-judul-baru="Catat Saldo">
-        <form method="POST" action="{{ route('admin.keuangan.saldo.store') }}">
-            @csrf
-            <input type="hidden" name="_dialog" value="dlg-catat">
-            <div class="dlg-kepala">
-                <h2 data-judul>Catat Saldo</h2>
-                <button type="button" class="dlg-x" data-tutup aria-label="Tutup">@include('partials.icon', ['name' => 'x', 'class' => 'ic-sm'])</button>
-            </div>
-            <div class="dlg-isi">
-                <div class="fld">
-                    <label for="tanggal">Tanggal</label>
-                    <input type="date" id="tanggal" name="tanggal" required max="{{ $tglHariIni }}" data-kunci value="{{ old('tanggal', $tglHariIni) }}">
-                </div>
-                <div class="fld">
-                    <label for="saldo_tampil">Saldo rekening</label>
-                    <div class="rp-input">
-                        <span class="rp">Rp</span>
-                        <input type="text" id="saldo_tampil" data-rupiah="saldo" inputmode="numeric" autocomplete="off" placeholder="0" required>
-                    </div>
-                    <input type="hidden" name="saldo" id="saldo" value="{{ old('saldo', $hariIni?->saldo) }}">
-                </div>
-                <div class="dlg-catatan">Mengisi tanggal yang sudah ada akan memperbarui saldonya.</div>
-            </div>
-            <div class="dlg-kaki">
-                @if ($bolehHapus)
-                    <button type="submit" form="hapus-saldo" class="btn btn-danger btn-sm" data-hapus hidden>Hapus</button>
-                @endif
-                <div class="kanan">
-                    <button type="button" class="btn btn-ghost" data-tutup>Batal</button>
-                    <button type="submit" class="btn btn-accent">Simpan</button>
-                </div>
-            </div>
-        </form>
-        @if ($bolehHapus)
-            <form method="POST" id="hapus-saldo" class="dlg-hapus">@csrf @method('DELETE')</form>
-        @endif
-    </dialog>
-
-    @include('admin.keuangan._impor', [
-        'impor'  => route('admin.keuangan.saldo.import'),
-        'kolom'  => 'tanggal, saldo',
-        'contoh' => '2026-04-05,25000000',
-    ])
 @endsection
 
 @push('scripts')
@@ -242,15 +192,17 @@
     // ---------- Ringkasan ----------
     function isiRingkas(r) {
         document.getElementById('r-saldo').textContent = r.saldo === null ? '—' : rp(r.saldo);
-        document.getElementById('r-tanggal').textContent = r.tanggal || 'Belum ada catatan';
+        document.getElementById('r-bni').textContent = r.bni === null ? '—' : rp(r.bni);
+        document.getElementById('r-bri').textContent = r.bri === null ? '—' : rp(r.bri);
+        document.getElementById('r-tanggal').textContent = r.tanggal ? 'per ' + r.tanggal : 'Buku Besar masih kosong';
         const ubah = document.getElementById('r-ubah');
         ubah.textContent = r.perubahan === null ? '—' : tanda(r.perubahan);
         ubah.className = 'n ' + (r.perubahan === null ? '' : kelas(r.perubahan));
-        document.getElementById('r-ubah-sub').textContent = r.tanggalSebelum ? 'dibanding ' + r.tanggalSebelum : 'dibanding catatan sebelumnya';
+        document.getElementById('r-ubah-sub').textContent = r.tanggalUbah ? 'bersih ' + r.tanggalUbah : 'belum ada transaksi';
         const lima = document.getElementById('r-lima');
         lima.textContent = r.vsLima === null ? '—' : tanda(r.vsLima);
         lima.className = 'n ' + (r.vsLima === null ? '' : kelas(r.vsLima));
-        document.getElementById('r-ajak').hidden = !!r.hariIniTercatat;
+        document.getElementById('r-lima-sub').textContent = r.tanggalLima ? 'dari saldo ' + r.tanggalLima : '—';
     }
 
     // ---------- Grafik saldo harian (garis) ----------
@@ -267,7 +219,7 @@
         }
 
         if (!data.length) {
-            plot.innerHTML = '<div class="sl-kosong">Belum ada saldo yang dicatat. Tekan "Catat Saldo" untuk memulai.</div>';
+            plot.innerHTML = '<div class="sl-kosong">Belum ada transaksi di Buku Besar.</div>';
             return;
         }
 
@@ -339,6 +291,9 @@
             if (beda !== null) {
                 const s = document.createElement('span'); s.className = kelas(beda); s.textContent = tanda(beda); tip.appendChild(s);
             }
+            const rinci = document.createElement('small');
+            rinci.textContent = 'BNI ' + rp(data[k].bni) + ' · BRI ' + rp(data[k].bri);
+            tip.appendChild(rinci);
             tip.style.left = Math.min(Math.max(p[0] * kotak.width / W, 70), kotak.width - 70) + 'px';
             tip.style.top = (p[1] * kotak.height / H) + 'px';
             tip.hidden = false;
@@ -374,31 +329,26 @@
             const kol = document.createElement('div'); kol.className = 'sl-kol';
             const n = document.createElement('div'); n.className = 'nilai';
             n.textContent = b.saldo === null ? '—' : singkat(b.saldo);
-            if (b.saldo !== null) n.title = rp(b.saldo);
+            if (b.saldo !== null) n.title = rp(b.saldo) + ' (BNI ' + rp(b.bni) + ' · BRI ' + rp(b.bri) + ')';
 
             const tiang = document.createElement('div'); tiang.className = 'tiang';
             const batang = document.createElement('div');
             if (b.saldo === null) {
                 batang.className = 'batang kosong';
-                batang.title = b.belum ? 'Tanggal 5 belum tiba' : 'Tidak ada catatan tanggal 1–5';
+                batang.title = b.belum ? 'Tanggal 5 belum tiba' : 'Sebelum Buku Besar dimulai';
             } else {
                 batang.className = 'batang';
                 batang.style.height = Math.max(3, Math.round(b.saldo / maks * 170)) + 'px';
-                batang.title = rp(b.saldo);
+                batang.title = rp(b.saldo) + ' (BNI ' + rp(b.bni) + ' · BRI ' + rp(b.bri) + ')';
             }
             tiang.appendChild(batang);
 
             const bln = document.createElement('div'); bln.className = 'bln'; bln.textContent = b.label;
             const beda = document.createElement('div');
             beda.className = 'beda ' + (b.selisih === null ? 'tetap' : kelas(b.selisih));
-            beda.textContent = b.selisih === null ? (b.belum ? 'belum tiba' : (b.saldo === null ? 'tidak dicatat' : 'awal')) : (b.selisih > 0 ? '▲ ' : b.selisih < 0 ? '▼ ' : '') + singkat(Math.abs(b.selisih));
+            beda.textContent = b.selisih === null ? (b.belum ? 'belum tiba' : (b.saldo === null ? '—' : 'awal')) : (b.selisih > 0 ? '▲ ' : b.selisih < 0 ? '▼ ' : '') + singkat(Math.abs(b.selisih));
             if (b.selisih !== null) beda.title = tanda(b.selisih) + ' dari bulan sebelumnya';
-
-            // Baris "pakai" selalu ada (kosong bila tidak perlu) supaya semua
-            // kolom sama tinggi dan dasar batangnya sejajar.
-            const pakai = document.createElement('div'); pakai.className = 'pakai';
-            pakai.textContent = (b.dipakai && b.dipakai !== b.tanggal) ? 'pakai ' + tglPendek(tgl(b.dipakai)) : '\u00a0';
-            kol.append(n, tiang, bln, beda, pakai);
+            kol.append(n, tiang, bln, beda);
             el.appendChild(kol);
         });
         el.scrollLeft = el.scrollWidth;

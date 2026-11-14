@@ -1,6 +1,6 @@
 {{-- Kepala halaman Keuangan: judul, tombol utama "Catat …", menu "Lainnya", tab,
      dan pemberitahuan hasil impor.
-     Parameter: $sub, $catat ['label', 'dialog', 'isi'], $lainnya [['label', 'href'|'dialog'], …] --}}
+     Parameter: $sub, $catat ['label', 'dialog', 'isi'] atau ['label', 'href'], $lainnya [['label', 'href'|'dialog'], …] --}}
 @include('admin.keuangan._gaya')
 
 <div class="keu-kepala">
@@ -25,9 +25,15 @@
                 </div>
             </details>
         @endif
-        <button type="button" class="btn btn-accent" data-buka="{{ $catat['dialog'] }}" data-isi="{{ json_encode($catat['isi'] ?? new stdClass) }}">
-            @include('partials.icon', ['name' => 'plus', 'class' => 'ic-sm']) {{ $catat['label'] }}
-        </button>
+        @if (isset($catat['href']))
+            <a class="btn btn-accent" href="{{ $catat['href'] }}">
+                @include('partials.icon', ['name' => 'plus', 'class' => 'ic-sm']) {{ $catat['label'] }}
+            </a>
+        @else
+            <button type="button" class="btn btn-accent" data-buka="{{ $catat['dialog'] }}" data-isi="{{ json_encode($catat['isi'] ?? new stdClass) }}">
+                @include('partials.icon', ['name' => 'plus', 'class' => 'ic-sm']) {{ $catat['label'] }}
+            </button>
+        @endif
     </div>
 </div>
 

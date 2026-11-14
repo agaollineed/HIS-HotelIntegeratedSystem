@@ -298,6 +298,21 @@
     const rp = n => (n < 0 ? '-Rp ' : 'Rp ') + Math.abs(n).toLocaleString('id-ID');
     const nilai = id => parseInt(document.getElementById(id).value || '0', 10) || 0;
 
+    // Datang dari tombol "Catat Transaksi" di halaman Saldo: langsung buka
+    // jendela catat hari ini, lalu buang ?catat supaya muat ulang tidak
+    // membukanya lagi.
+    const qs = new URLSearchParams(location.search);
+    if (qs.has('catat')) {
+        qs.delete('catat');
+        history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : ''));
+        window.addEventListener('load', function () {
+            if (!document.querySelector('dialog[open]')) {
+                const tombol = document.querySelector('.keu-aksi > [data-buka="dlg-catat"]');
+                if (tombol) tombol.click();
+            }
+        });
+    }
+
     function hitung() {
         document.getElementById('bb-masuk').textContent = rp(nilai('masuk_bni') + nilai('masuk_bri'));
         document.getElementById('bb-keluar').textContent = rp(nilai('keluar_bni') + nilai('keluar_bri'));

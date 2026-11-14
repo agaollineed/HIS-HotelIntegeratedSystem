@@ -270,8 +270,14 @@
                         <dt>Nama Tamu</dt>
                         <dd>{{ $b->nama_tamu }}</dd>
 
-                        <dt>Telepon</dt>
-                        <dd class="mono">{{ $b->telepon }}</dd>
+                        <dt>WhatsApp</dt>
+                        <dd class="mono">
+                            @if ($b->linkWa())
+                                <a class="wa-link" href="{{ $b->linkWa() }}" target="_blank" rel="noopener">{{ $b->telepon }} · Chat WA</a>
+                            @else
+                                <span style="color: var(--muted)">{{ $b->labelTelepon() }}</span>
+                            @endif
+                        </dd>
 
                         @if ($tanggalSeragam)
                             <dt>Check-in</dt>
@@ -388,13 +394,13 @@
 
                         @if ($b->foto_bayar_awal)
                             <div class="foto-item">
-                                <div class="foto-lbl">Bukti bayar saat pesanan dibuat</div>
+                                <div class="foto-lbl">{{ $b->labelBuktiAwal() }}</div>
                                 <img src="{{ route('bayar.awal', $b) }}"
-                                     alt="Bukti pembayaran awal {{ $b->nama_tamu }}"
+                                     alt="{{ $b->labelBuktiAwal() }} {{ $b->nama_tamu }}"
                                      data-lightbox="{{ route('bayar.awal', $b) }}">
                             </div>
-                        @elseif ($b->wajibBuktiBayarAwal() && ! \App\Models\Booking::adaBuktiBayarDi($b->grup_semua ?? $grup))
-                            <div class="ktp-none">Ditandai {{ $b->labelBayar() }} tanpa bukti bayar — pesanan lama, sebelum bukti diwajibkan.</div>
+                        @elseif ($b->wajibBuktiBayarAwal() && ! \App\Models\Booking::buktiAwalLengkapDi($b->grup_semua ?? $grup, $b->sumber))
+                            <div class="ktp-none">{{ $b->dariTiket() ? 'Pesanan Tiket.com tanpa e-tiket — pesanan lama, sebelum e-tiket diwajibkan.' : 'Ditandai ' . $b->labelBayar() . ' tanpa bukti bayar — pesanan lama, sebelum bukti diwajibkan.' }}</div>
                         @endif
 
                         @if ($b->foto_pelunasan)

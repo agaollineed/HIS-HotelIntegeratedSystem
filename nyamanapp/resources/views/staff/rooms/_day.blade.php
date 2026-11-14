@@ -103,7 +103,11 @@
                         @endif
                     @endforeach
                     <div class="bk-meta">
-                        <span class="tel">{{ $utama->telepon }}</span> ·
+                        @if ($utama->linkWa())
+                            <a class="tel wa-link" href="{{ $utama->linkWa() }}" target="_blank" rel="noopener" title="Chat WhatsApp">{{ $utama->telepon }}</a> ·
+                        @else
+                            <span class="tel">{{ $utama->labelTelepon() }}</span> ·
+                        @endif
                         {{ $utama->check_in->translatedFormat('j M Y') }} → {{ $utama->check_out->translatedFormat('j M Y') }}
                         ({{ $utama->durasi }} malam)
                         @if ($sudah)
@@ -178,7 +182,7 @@
                             </dl>
                             @php
                                 $bukti = collect([
-                                    ['Bukti bayar awal', $utama->foto_bayar_awal ? route('bayar.awal', $utama) : null],
+                                    [$utama->dariTiket() ? 'E-tiket' : 'Bukti bayar awal', $utama->foto_bayar_awal ? route('bayar.awal', $utama) : null],
                                     ['Bukti pelunasan', $utama->foto_pelunasan ? route('bayar.show', $utama) : null],
                                 ])->merge($semuaKm->filter(fn ($m) => $m->foto_bayar_tambahan)
                                     ->map(fn ($m) => ['Bayar selisih ' . $m->room?->nomor, route('bayar.tambahan', $m)]))
